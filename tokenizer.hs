@@ -133,7 +133,9 @@ tokenizeShortest :: [TokenCandidate] -> TokenCandidate
 tokenizeShortest x  = minimumBy (tokenizeShortestCompare) x
 
 tokenize :: String -> [Token]
-tokenize "" = []
-tokenize x = tokenizeEmit $ tokenizeShortest matches
+tokenize [] = []
+tokenize x
+  | null matches = []
+  | otherwise = tokenizeEmit $ tokenizeShortest matches
   where   
     matches = filter (\(n, _, _) -> isJust n) $ map (\(n, y, p) -> (matchRegexAll n x, y, p)) tokenDefinitions

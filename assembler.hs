@@ -1,3 +1,5 @@
+module Assembler where
+
 import Data.Word
 import Tokenizer
 import Evaluation

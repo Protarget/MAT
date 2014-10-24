@@ -1,8 +1,8 @@
-import Macros
-import Expression
-import Evaluation
-import Tokenizer
+import System.Environment
+import Numeric
+import Assembler
 
-assemble = expandMacros . tokenize
-
-main = putStrLn "Teh"
+main = do
+  cmdArgs <- getArgs
+  fileData <- readFile (cmdArgs !! 0)
+  putStrLn $ show $ map (\n -> showHex n "") $ assemble fileData
