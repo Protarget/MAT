@@ -6,10 +6,10 @@ import Evaluation
 import Expression
 import Data.Bits
 import Data.List
-import Macros
 import Numeric
 
 data Label = Label String Int deriving(Show)
+data AssemblyFragment = AssemblyFragment Int [Word8] deriving(Show)
 
 decomposeU16 :: Word16 -> (Word8, Word8)
 decomposeU16 v = (fromIntegral (v .&. 0xFF), fromIntegral (shiftR (v .&. 0xFF00) 8))
@@ -300,13 +300,16 @@ assembleTokens labels addr ((TokenPragma "org"):(TokenAddress x):r) = assembleTo
 assembleTokens labels addr (v:[]) = error ("Unexpected token: " ++ (show v))
 assembleTokens labels addr [] = []
 
-assemble :: String -> [Word8]
-assemble c = assembleTokens labels 0x0 expandedCode
+assemble :: String -> [AssemblyFragment]
+assemble c = collectFragments 0x0 expandedCode []
   where
+    collectFragments :: Int -> [Token] -> [Token] -> [AssemblyFragment]
+    collectFragments addr ((TokenPragma "org"):(TokenAddress a):r) buffer
+      | null buffer = collectFragments a r []
+      | otherwise = (AssemblyFragment addr (assembleTokens labels addr buffer)) : collectFragments a r []
+    collectFragments addr (x:xs) buffer = collectFragments addr xs (buffer ++ [x])
+    collectFragments addr [] buffer = (AssemblyFragment addr (assembleTokens labels addr buffer)) : []
+
     code = tokenize c
     expandedCode = expandMacros [] code
     labels = findLabels 0x0 expandedCode
-
-testcode = ".org $600 jerry: lda #32 bne jerry"
-testexpanded = expandMacros [] $ tokenize testcode
-test = map (\n -> showHex n "") $ assemble testcode

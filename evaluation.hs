@@ -3,6 +3,7 @@ module Evaluation where
 import Tokenizer
 import Expression
 import Data.List
+import Debug.Trace
 
 isExpressionBool :: ExpressionResult -> Bool
 isExpressionBool (EBool _) = True
@@ -87,6 +88,11 @@ builtinEqual macros (a:b:[]) = equalChecker (evaluateExpression macros a) (evalu
   where
     equalChecker (EInt x) (EInt y) = EBool (x == y)
 
+builtinExpand :: [Macro] -> [ExpressionNode] -> ExpressionResult
+builtinExpand macros (a:[]) = expandChecker (evaluateExpression macros a)
+  where
+    expandChecker (ETokens v) = ETokens $ expandMacros macros v
+
 builtinLit = builtinNumericTokenizer (\x -> ETokens [TokenLiteral x]) "lit" "Cannot create literal token from non-integer value"
 builtinAddr = builtinNumericTokenizer (\x -> ETokens [TokenAddress x]) "addr" "Cannot create address token from non-integer value"
 builtinInd = builtinNumericTokenizer (\x -> ETokens [TokenIndirect x]) "ind" "Cannot create indirect token from non-integer value"
@@ -99,6 +105,39 @@ builtinLabel = builtInStringTokenizer(\x -> ETokens [TokenLabel x]) "label" "Can
 builtinAdd = builtinNumericFold (+) "Cannot add non-integer values"
 builtinSub = builtinNumericFold (-) "Cannot subtract non-integer values"
 builtinMul = builtinNumericFold (*) "Cannot multiply non-integer values"
+
+evaluateExpression :: [Macro] -> ExpressionNode -> ExpressionResult
+evaluateExpression macros (Expression (ExpressionValue (TokenSymbol(f)):args)) 
+  | f == "value" = builtinExtractValue args
+  | f == "merge" = builtinMerge macros args
+  | f == "add" = builtinAdd macros args
+  | f == "sub" = builtinSub macros args
+  | f == "mul" = builtinMul macros args
+  | f == "lit" = builtinLit macros args
+  | f == "addr" = builtinAddr macros args
+  | f == "ind" = builtinInd macros args
+  | f == "inix" = builtinInIx macros args
+  | f == "ixin" = builtinIxIn macros args
+  | f == "label" = builtinLabel macros args
+  | f == "sym" = builtinSym macros args
+  | f == "if" = builtinIf macros args
+  | f == "equal" = builtinEqual macros args
+  | f == "expand" = builtinExpand macros args
+  | f == "length" = lengthCheck (evaluateExpression macros (args !! 0))
+  | otherwise = potentialMacro macros f args
+  where
+    lengthCheck (ETokens v) = EInt (length v)
+
+
+evaluateExpression macros (ExpressionTokenLiteral v) = ETokens v
+evaluateExpression macros (ExpressionValue (TokenAddress v)) = EInt v
+evaluateExpression macros (ExpressionValue (TokenLiteral v)) = EError("Literal token is not a valid expression type")
+evaluateExpression macros (ExpressionValue (TokenIndirect v)) = EError("Indirect token is not a valid expression type")
+evaluateExpression macros (ExpressionValue (TokenIndexedIndirect v)) = EError("Indexed Indirect token is not a valid expression type")
+evaluateExpression macros (ExpressionValue (TokenIndirectIndexed v)) = EError("Indirect Indexed token is not a valid expression type")
+evaluateExpression macros (ExpressionValue (TokenString v)) = EString v
+evaluateExpression macros (ExpressionRaw v) = v
+evaluateExpression macros node = error ("Wtf, something went wrong: " ++ (show macros) ++ " | " ++ (show node))
 
 reifyMacroArgument :: ExpressionNode -> String -> ExpressionResult -> ExpressionNode
 reifyMacroArgument (ExpressionValue (TokenSymbol x)) argName argValue
@@ -121,30 +160,47 @@ potentialMacro macros name argValues = potentialMacroCheck $ find (\(Macro v _ _
     potentialMacroCheck (Just (Macro _ argNames macroBody)) = expandMacro macros argNames argValues macroBody
     potentialMacroCheck Nothing = EError("Undefined macro name: " ++ name)
 
-evaluateExpression :: [Macro] -> ExpressionNode -> ExpressionResult
-evaluateExpression macros (Expression (ExpressionValue (TokenSymbol(f)):args)) 
-  | f == "value" = builtinExtractValue args
-  | f == "merge" = builtinMerge macros args
-  | f == "add" = builtinAdd macros args
-  | f == "sub" = builtinSub macros args
-  | f == "mul" = builtinMul macros args
-  | f == "lit" = builtinLit macros args
-  | f == "addr" = builtinAddr macros args
-  | f == "ind" = builtinInd macros args
-  | f == "inix" = builtinInIx macros args
-  | f == "ixin" = builtinIxIn macros args
-  | f == "label" = builtinLabel macros args
-  | f == "sym" = builtinSym macros args
-  | f == "if" = builtinIf macros args
-  | f == "equal" = builtinEqual macros args
-  | otherwise = potentialMacro macros f args
+readMacroDefinition :: [Token] -> (Maybe Macro, [Token])
+readMacroDefinition (n:nr) = readMacroDefinition tree
+  where
+    (tree, remainder) = readExpression (n:nr)
+    readMacroDefinition :: ExpressionNode -> (Maybe Macro, [Token])
+    readMacroDefinition (Expression ((ExpressionValue (TokenSymbol "macro")) : (ExpressionValue (TokenSymbol macroName) : (Expression macroArgs) : macroBody : [])))
+      | all isNodeSymbol macroArgs = (Just $ Macro macroName (map (\(ExpressionValue (TokenSymbol v)) -> v) macroArgs) macroBody, remainder)
+      | otherwise = (Nothing, nr)
+    readMacroDefinition _ = (Nothing, nr)
 
+readMacroDefinitions :: [Token] -> ([Token], [Token], [Macro])
+readMacroDefinitions [] = ([], [], [])
+readMacroDefinitions (BeginExpression:nr) = (x, y, z)
+  where
+    (x, y, z) = checkForMacroDefinition $ readMacroDefinition (BeginExpression:nr)
+    checkForMacroDefinition (Just x, skip) = (next, tokens, x : defs)
+      where
+        (next, tokens, defs) = readMacroDefinitions skip
+    checkForMacroDefinition (Nothing, _) = (next, BeginExpression : tokens, defs)
+      where
+        (next, tokens, defs) = readMacroDefinitions nr
+readMacroDefinitions (n:nr) = (x, n:y, z)
+  where
+    (x, y, z) = readMacroDefinitions nr
 
-evaluateExpression macros (ExpressionTokenLiteral v) = ETokens v
-evaluateExpression macros (ExpressionValue (TokenAddress v)) = EInt v
-evaluateExpression macros (ExpressionValue (TokenLiteral v)) = EError("Literal token is not a valid expression type")
-evaluateExpression macros (ExpressionValue (TokenIndirect v)) = EError("Indirect token is not a valid expression type")
-evaluateExpression macros (ExpressionValue (TokenIndexedIndirect v)) = EError("Indexed Indirect token is not a valid expression type")
-evaluateExpression macros (ExpressionValue (TokenIndirectIndexed v)) = EError("Indirect Indexed token is not a valid expression type")
-evaluateExpression macros (ExpressionValue (TokenString v)) = EString v
-evaluateExpression macros (ExpressionRaw v) = v
+tokenify :: ExpressionResult -> [Token]
+tokenify (ETokens v) = v
+tokenify (EInt v) = [TokenLiteral v]
+tokenify EVoid = []
+tokenify x = []
+
+expandMacros :: [Macro] -> [Token] -> [Token]
+expandMacros m c
+  | (c /= result) = expandMacros merged_macros result
+  | otherwise = c
+  where
+    result = (evaluateMacros code)
+    merged_macros = m ++ macros
+    (_, code, macros) = readMacroDefinitions c
+    evaluateMacros (BeginExpression:xr) = (tokenify $ evaluateExpression merged_macros expression) ++ evaluateMacros remainder
+      where
+        (expression, remainder) = readExpression (BeginExpression:xr)
+    evaluateMacros [] = []
+    evaluateMacros (x:xr) = x : evaluateMacros xr
