@@ -23,7 +23,9 @@ data Token =
   TokenPragma String |
   BeginExpression | 
   EndExpression |
-  TokenLiteralDelimiter
+  TokenLiteralBegin |
+  TokenLiteralEnd
+  deriving(Eq)
 
 type TokenProducer = [String] -> (Token, String)
 type TokenCandidate = (Maybe (String, String, String, [String]), TokenProducer, Int)
@@ -43,7 +45,8 @@ instance Show Token where
   show (TokenPragma v) = '.' : (show v)
   show BeginExpression = "<"
   show EndExpression = ">"
-  show TokenLiteralDelimiter = "`"
+  show TokenLiteralBegin = "{"
+  show TokenLiteralEnd = "}"
 
 thenCmp :: Ordering -> Ordering -> Ordering
 thenCmp EQ x = x
@@ -76,7 +79,8 @@ readIndexedIndirect (x:[]) = (TokenIndexedIndirect (readNumber x), "")
 readControl :: TokenProducer
 readControl ("[":[]) = (BeginExpression, "")
 readControl ("]":[]) = (EndExpression, "")
-readControl ("`":[]) = (TokenLiteralDelimiter, "")
+readControl ("{":[]) = (TokenLiteralBegin, "")
+readControl ("}":[]) = (TokenLiteralEnd, "")
 
 readSymbol :: TokenProducer
 readSymbol (x:y:xs) = (TokenSymbol x, y)
@@ -114,7 +118,7 @@ tokenDefinitions =
   (defineToken "(\\$[0-9a-fA-F]+)([^0-9a-fA-F]|$)"         readAddress 5)         :    -- Read a hex address
   (defineToken "\\#([0-9]+)([^0-9]|$)"                     readLiteral 5)         :    -- Read a decimal literal
   (defineToken "\\#(\\$[0-9a-fA-F]+)([^0-9a-fA-F]|$)"      readLiteral 5)         :    -- Read a hex literal
-  (defineToken "(\\[|\\]|`)"                               readControl 5)         :    -- Read a control character
+  (defineToken "(\\[|\\]|\\{|\\})"                               readControl 5)         :    -- Read a control character
   (defineToken "([a-zA-Z+-*][a-zA-Z0-9]*)\\:([^\\:]|$)"    readLabel 4)           :    -- Read a label
   (defineToken "([a-zA-Z][a-zA-Z0-9]*)([^a-zA-Z0-9]|$)"    readSymbol 5)          : [] -- Read a symbol
 

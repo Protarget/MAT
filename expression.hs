@@ -11,7 +11,7 @@ instance Show ExpressionNode where
   show (ExpressionValue v) = show v
   show (Expression v) = show v
   show (ExpressionError v) = "{ERROR: " ++ v ++ "}"
-  show (ExpressionTokenLiteral v) = "`" ++ (intercalate " " $ map show v) ++ "`"
+  show (ExpressionTokenLiteral v) = "{TOKENS: " ++ (intercalate " " $ map show v) ++ "}"
   show (ExpressionRaw v) = "{VAL: " ++ show v ++ "}"
 
 instance Show ExpressionResult where
@@ -32,7 +32,7 @@ readExpression (BeginExpression:e) = (Expression x, y)
         (v, r)   = readExpression (BeginExpression:e)
         (nv, nr) = scanExpression(r)
     scanExpression (EndExpression:r) = ([], r)
-    scanExpression (TokenLiteralDelimiter:r) = readTokenLiteral r []
+    scanExpression (TokenLiteralBegin:r) = readTokenLiteral 1 r []
     scanExpression [] = (ExpressionError ("Unmatched expression branch at: [" ++ (intercalate [] $ map show e)) : [], [])
     scanExpression ((TokenSymbol "true"):r) = ((ExpressionRaw (EBool True)):nv, nr) where (nv, nr) = scanExpression r
     scanExpression ((TokenSymbol "false"):r) = ((ExpressionRaw (EBool False)):nv, nr) where (nv, nr) = scanExpression r
@@ -40,11 +40,13 @@ readExpression (BeginExpression:e) = (Expression x, y)
     scanExpression (v:r) = (ExpressionValue v : nv, nr)
       where
         (nv, nr) = scanExpression r
-    readTokenLiteral :: [Token] -> [Token] -> ([ExpressionNode], [Token])
-    readTokenLiteral (TokenLiteralDelimiter:r) buffer = (ExpressionTokenLiteral buffer : nv, nr)
+    readTokenLiteral :: Int -> [Token] -> [Token] -> ([ExpressionNode], [Token])
+    readTokenLiteral depth (TokenLiteralBegin:r) buffer = readTokenLiteral (depth + 1) r (buffer ++ [TokenLiteralBegin])
+    readTokenLiteral 1 (TokenLiteralEnd:r) buffer = (ExpressionTokenLiteral buffer : nv, nr)
       where
         (nv, nr) = scanExpression r
-    readTokenLiteral (v:r) buffer = readTokenLiteral r (buffer ++ [v])
+    readTokenLiteral depth (TokenLiteralEnd:r) buffer = readTokenLiteral (depth - 1) r (buffer ++ [TokenLiteralEnd])
+    readTokenLiteral depth (v:r) buffer = readTokenLiteral depth r (buffer ++ [v])
 
 readExpression (x:xr) = (ExpressionError ("Unable to parse expression branch:" ++ show x), xr)
 

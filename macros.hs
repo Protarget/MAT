@@ -36,11 +36,15 @@ tokenify (EInt v) = [TokenLiteral v]
 tokenify EVoid = []
 tokenify x = trace ("UNDEFINED: " ++ show x) []
 
-expandMacros :: [Token] -> [Token]
-expandMacros c = evaluateMacros code
+expandMacros :: [Macro] -> [Token] -> [Token]
+expandMacros m c
+  | (c /= result) = expandMacros merged_macros result
+  | otherwise = c
   where
+    result = trace ("Evaluating: " ++ (show code)) (evaluateMacros code)
+    merged_macros = m ++ macros
     (_, code, macros) = readMacroDefinitions c
-    evaluateMacros (BeginExpression:xr) = (tokenify $ evaluateExpression macros expression) ++ evaluateMacros remainder
+    evaluateMacros (BeginExpression:xr) = (tokenify $ evaluateExpression merged_macros expression) ++ evaluateMacros remainder
       where
         (expression, remainder) = readExpression (BeginExpression:xr)
     evaluateMacros [] = []

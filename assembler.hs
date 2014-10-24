@@ -255,10 +255,40 @@ resolveLabel labels name = checkLabel (find (\(Label n _) -> n == name) labels)
     checkLabel (Just x) = x
     checkLabel Nothing = error ("Cannot resolve label: " ++ name)
 
+isImpliedOnly :: String -> Bool
+isImpliedOnly i =
+  i == "brk" ||
+  i == "clc" ||
+  i == "cld" ||
+  i == "cli" ||
+  i == "clv" ||
+  i == "dex" ||
+  i == "dey" ||
+  i == "inx" ||
+  i == "iny" ||
+  i == "nop" ||
+  i == "pha" ||
+  i == "php" ||
+  i == "pla" ||
+  i == "plp" ||
+  i == "rti" ||
+  i == "rts" || 
+  i == "sec" ||
+  i == "sed" ||
+  i == "sei" ||
+  i == "tax" ||
+  i == "tay" ||
+  i == "tsx" ||
+  i == "txa" ||
+  i == "txs" ||
+  i == "tya"
+
 assembleTokens :: [Label] -> Int -> [Token] -> [Word8]
 assembleTokens labels addr ((TokenLabel v):r) = assembleTokens labels addr r
 assembleTokens labels addr ((TokenSymbol i):(TokenLiteral v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionLiteral i v 
-assembleTokens labels addr ((TokenSymbol i):(TokenSymbol v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionLabel addr i (resolveLabel labels v)
+assembleTokens labels addr ((TokenSymbol i):(TokenSymbol v):r)
+  | isImpliedOnly i = let (increment, result) = instructionImplied i in result ++ assembleTokens labels (addr + increment) ((TokenSymbol v):r) 
+  | otherwise = let (increment, result) = instructionLabel addr i (resolveLabel labels v) in result ++ assembleTokens labels (addr + increment) r 
 assembleTokens labels addr ((TokenSymbol i):(TokenAddress v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionAddress i v 
 assembleTokens labels addr ((TokenSymbol i):(TokenAddressX v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionAddressX i v
 assembleTokens labels addr ((TokenSymbol i):(TokenAddressY v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionAddressY i v 
@@ -274,9 +304,9 @@ assemble :: String -> [Word8]
 assemble c = assembleTokens labels 0x0 expandedCode
   where
     code = tokenize c
-    expandedCode = expandMacros code
+    expandedCode = expandMacros [] code
     labels = findLabels 0x0 expandedCode
 
 testcode = ".org $600 jerry: lda #32 bne jerry"
-testexpanded = expandMacros $ tokenize testcode
+testexpanded = expandMacros [] $ tokenize testcode
 test = map (\n -> showHex n "") $ assemble testcode
