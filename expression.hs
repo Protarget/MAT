@@ -50,6 +50,17 @@ readExpression (BeginExpression:e) = (Expression x, y)
 
 readExpression (x:xr) = (ExpressionError ("Unable to parse expression branch:" ++ show x), xr)
 
+readExpressionLiteral :: [Token] -> ([Token], [Token])
+readExpressionLiteral = readExpressionLiteralDepth 0
+  where
+    readExpressionLiteralDepth :: Int -> [Token] -> ([Token], [Token])
+    readExpressionLiteralDepth depth (BeginExpression:r) = ((BeginExpression:next), rem) where (next, rem) = readExpressionLiteralDepth (depth + 1) r
+    readExpressionLiteralDepth 1     (EndExpression:r) = ((EndExpression:[]), r)
+    readExpressionLiteralDepth depth (EndExpression:r) = ((EndExpression:next), rem) where  (next, rem) = readExpressionLiteralDepth (depth - 1) r
+    readExpressionLiteralDepth depth (n:r) = (n:next, rem) where  (next, rem) = readExpressionLiteralDepth depth r
+    readExpressionLiteralDepth x y = error ("Wtf: " ++ show x ++ " | " ++ show y)
+
+
 expressionErrors :: ExpressionNode -> [ExpressionNode]
 expressionErrors (ExpressionError v) = [ExpressionError v]
 expressionErrors (ExpressionValue v) = []

@@ -98,7 +98,6 @@ builtinAddr = builtinNumericTokenizer (\x -> ETokens [TokenAddress x]) "addr" "C
 builtinInd = builtinNumericTokenizer (\x -> ETokens [TokenIndirect x]) "ind" "Cannot create indirect token from non-integer value"
 builtinInIx = builtinNumericTokenizer (\x -> ETokens [TokenIndirectIndexed x]) "inix" "Cannot create indirect indexed token from non-integer value"
 builtinIxIn = builtinNumericTokenizer (\x -> ETokens [TokenIndexedIndirect x]) "ixin" "Cannot create indexed indirect token from non-integer value"
-
 builtinSym = builtInStringTokenizer(\x -> ETokens [TokenSymbol x]) "sym" "Cannot create symbol from non-string value"
 builtinLabel = builtInStringTokenizer(\x -> ETokens [TokenLabel x]) "label" "Cannot create label from non-string value"
 
@@ -189,6 +188,7 @@ tokenify :: ExpressionResult -> [Token]
 tokenify (ETokens v) = v
 tokenify (EInt v) = [TokenLiteral v]
 tokenify EVoid = []
+tokenify (EError e) = [TokenDefer]
 tokenify x = []
 
 expandMacros :: [Macro] -> [Token] -> [Token]
@@ -196,11 +196,14 @@ expandMacros m c
   | (c /= result) = expandMacros merged_macros result
   | otherwise = c
   where
-    result = (evaluateMacros code)
+    result = trace (show c) (evaluateMacros code)
     merged_macros = m ++ macros
     (_, code, macros) = readMacroDefinitions c
-    evaluateMacros (BeginExpression:xr) = (tokenify $ evaluateExpression merged_macros expression) ++ evaluateMacros remainder
+    evaluateMacros (BeginExpression:xr) = deferEvaluation value
       where
+        deferEvaluation (EError _) = l ++ evaluateMacros r where (l, r) = readExpressionLiteral (BeginExpression:xr)
+        deferEvaluation x = (tokenify x) ++ evaluateMacros remainder
+        value = evaluateExpression merged_macros expression
         (expression, remainder) = readExpression (BeginExpression:xr)
     evaluateMacros [] = []
     evaluateMacros (x:xr) = x : evaluateMacros xr

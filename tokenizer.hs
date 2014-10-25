@@ -21,6 +21,7 @@ data Token =
   TokenIndirectIndexed Int |
   TokenIndexedIndirect Int |
   TokenPragma String |
+  TokenDefer |
   BeginExpression | 
   EndExpression |
   TokenLiteralBegin |
@@ -43,6 +44,7 @@ instance Show Token where
   show (TokenIndirectIndexed v) = '(':(show v) ++ "),Y"
   show (TokenIndexedIndirect v) = '(':(show v) ++ ",X)"
   show (TokenPragma v) = '.' : (show v)
+  show TokenDefer = "{DEFER SHOULD NEVER BE VISIBLE!}"
   show BeginExpression = "<"
   show EndExpression = ">"
   show TokenLiteralBegin = "{"
@@ -118,7 +120,7 @@ tokenDefinitions =
   (defineToken "(\\$[0-9a-fA-F]+)([^0-9a-fA-F]|$)"         readAddress 5)         :    -- Read a hex address
   (defineToken "\\#([0-9]+)([^0-9]|$)"                     readLiteral 5)         :    -- Read a decimal literal
   (defineToken "\\#(\\$[0-9a-fA-F]+)([^0-9a-fA-F]|$)"      readLiteral 5)         :    -- Read a hex literal
-  (defineToken "(\\[|\\]|\\{|\\})"                               readControl 5)         :    -- Read a control character
+  (defineToken "(\\[|\\]|\\{|\\})"                         readControl 5)         :    -- Read a control character
   (defineToken "([a-zA-Z+-*][a-zA-Z0-9]*)\\:([^\\:]|$)"    readLabel 4)           :    -- Read a label
   (defineToken "([a-zA-Z][a-zA-Z0-9]*)([^a-zA-Z0-9]|$)"    readSymbol 5)          : [] -- Read a symbol
 
