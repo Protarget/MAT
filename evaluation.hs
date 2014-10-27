@@ -93,6 +93,9 @@ builtinExpand macros (a:[]) = expandChecker (evaluateExpression macros a)
   where
     expandChecker (ETokens v) = ETokens $ expandMacros macros v
 
+builtinLet :: [Macro] -> [ExpressionNode] -> ExpressionResult
+builtinLet macros ((ExpressionValue (TokenSymbol x)):y:z:[]) = evaluateExpression macros (reifyMacroArgument z x (evaluateExpression macros y))
+
 builtinLit = builtinNumericTokenizer (\x -> ETokens [TokenLiteral x]) "lit" "Cannot create literal token from non-integer value"
 builtinAddr = builtinNumericTokenizer (\x -> ETokens [TokenAddress x]) "addr" "Cannot create address token from non-integer value"
 builtinInd = builtinNumericTokenizer (\x -> ETokens [TokenIndirect x]) "ind" "Cannot create indirect token from non-integer value"
@@ -109,9 +112,9 @@ evaluateExpression :: [Macro] -> ExpressionNode -> ExpressionResult
 evaluateExpression macros (Expression (ExpressionValue (TokenSymbol(f)):args)) 
   | f == "value" = builtinExtractValue args
   | f == "merge" = builtinMerge macros args
-  | f == "add" = builtinAdd macros args
-  | f == "sub" = builtinSub macros args
-  | f == "mul" = builtinMul macros args
+  | f == "+" = builtinAdd macros args
+  | f == "-" = builtinSub macros args
+  | f == "*" = builtinMul macros args
   | f == "lit" = builtinLit macros args
   | f == "addr" = builtinAddr macros args
   | f == "ind" = builtinInd macros args
@@ -123,6 +126,7 @@ evaluateExpression macros (Expression (ExpressionValue (TokenSymbol(f)):args))
   | f == "equal" = builtinEqual macros args
   | f == "expand" = builtinExpand macros args
   | f == "length" = lengthCheck (evaluateExpression macros (args !! 0))
+  | f == "let" = builtinLet macros args
   | otherwise = potentialMacro macros f args
   where
     lengthCheck (ETokens v) = EInt (length v)
@@ -144,7 +148,7 @@ reifyMacroArgument (ExpressionValue (TokenSymbol x)) argName argValue
   | otherwise = (ExpressionValue (TokenSymbol x))
 reifyMacroArgument (Expression v) x y = Expression (map (\n -> reifyMacroArgument n x y) v)
 reifyMacroArgument n _ _ = n
-
+ 
 reifyMacroArguments :: ExpressionNode -> [String] -> [ExpressionResult] -> ExpressionNode
 reifyMacroArguments body args values = foldl (\x (n, v) -> reifyMacroArgument x n v) body (zip args values)
 

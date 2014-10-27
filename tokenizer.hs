@@ -1,6 +1,8 @@
 module Tokenizer where
 
-import Text.Regex
+import System.IO.Unsafe
+import Text.Regex.PCRE
+import Text.Regex.PCRE.String
 import Data.Maybe
 import Debug.Trace
 import Data.Char
@@ -25,7 +27,8 @@ data Token =
   BeginExpression | 
   EndExpression |
   TokenLiteralBegin |
-  TokenLiteralEnd
+  TokenLiteralEnd |
+  TokenComment
   deriving(Eq)
 
 type TokenProducer = [String] -> (Token, String)
@@ -55,7 +58,7 @@ thenCmp EQ x = x
 thenCmp x  _ = x
 
 defineToken :: String -> TokenProducer -> Int -> (Regex, TokenProducer, Int)
-defineToken pat fn pri = (mkRegex pat, fn, pri)
+defineToken pat fn pri = (makeRegex pat, fn, pri)
 
 readNumber :: String -> Int
 readNumber ('$':s) = fst $ head $ readHex s
@@ -102,9 +105,13 @@ readAddressX (x:_) = (TokenAddressX (readNumber x), "")
 readAddressY :: TokenProducer
 readAddressY (x:_) = (TokenAddressY (readNumber x), "")
 
+readComment :: TokenProducer
+readComment (_) = (TokenComment, "")
+
 tokenDefinitions :: [TokenDefinition]
 tokenDefinitions =
-  (defineToken "\"(.*)\""                                  readString 1)          :    -- Read a quoted string
+  (defineToken ";.*?;"                                      readComment 1)         :    -- Read a comment
+  (defineToken "\"(.*?)\""                                  readString 1)          :    -- Read a quoted string
   (defineToken "\\.([a-zA-Z]+)([^a-zA-Z]|$)"               readPragma 1)          :    -- Read a pragma
   (defineToken "([0-9]+)\\,[xX]"                           readAddressX 2)        :    -- Read a decimal,X address
   (defineToken "(\\$[0-9a-fA-F]+)\\,[xX]"                  readAddressX 2)        :    -- Read a hex,X address
@@ -121,13 +128,16 @@ tokenDefinitions =
   (defineToken "\\#([0-9]+)([^0-9]|$)"                     readLiteral 5)         :    -- Read a decimal literal
   (defineToken "\\#(\\$[0-9a-fA-F]+)([^0-9a-fA-F]|$)"      readLiteral 5)         :    -- Read a hex literal
   (defineToken "(\\[|\\]|\\{|\\})"                         readControl 5)         :    -- Read a control character
-  (defineToken "([a-zA-Z+-*][a-zA-Z0-9]*)\\:([^\\:]|$)"    readLabel 4)           :    -- Read a label
-  (defineToken "([a-zA-Z][a-zA-Z0-9]*)([^a-zA-Z0-9]|$)"    readSymbol 5)          : [] -- Read a symbol
+  (defineToken "([a-zA-Z\\-\\+\\*\\>\\<\\=][a-zA-Z0-9\\-\\+\\*\\>\\<\\=]*)\\:([^\\:]|$)"       readLabel 4)           :    -- Read a label
+  (defineToken "([a-zA-Z\\-\\+\\*\\>\\<\\=][a-zA-Z0-9\\-\\+\\*\\>\\<\\=]*)([^a-zA-Z0-9\\-\\+\\*]|$)"    readSymbol 5)          : [] -- Read a symbol
 
 tokenizeEmit :: TokenCandidate -> [Token]
-tokenizeEmit (Just (before, _, after, subexpressions), fn, _) = token : (tokenize (ignored ++ after))
+tokenizeEmit (Just (before, _, after, subexpressions), fn, _) = filterComment token
   where 
     (token, ignored) = fn subexpressions
+    filterComment :: Token -> [Token]
+    filterComment (TokenComment) = (tokenize after)
+    filterComment t = t : (tokenize (ignored ++ after))
 
 tokenizeShortestCompare :: TokenCandidate -> TokenCandidate -> Ordering
 tokenizeShortestCompare (Just (a,_,_,_), _, pa) (Just (b,_,_,_), _, pb) = comparing (length) a b `thenCmp` compare pa pb
@@ -143,5 +153,14 @@ tokenize [] = []
 tokenize x
   | null matches = []
   | otherwise = tokenizeEmit $ tokenizeShortest matches
-  where   
-    matches = filter (\(n, _, _) -> isJust n) $ map (\(n, y, p) -> (matchRegexAll n x, y, p)) tokenDefinitions
+  where
+    matches = 
+      filter (\(n, _, _) -> isJust n) $ 
+      map (\(n, y, p) -> ((unWrapRight $ unsafePerformIO $ regexec n x), y, p)) tokenDefinitions
+
+isJustRight :: (Either WrapError (Maybe (String, String, String, [String]))) -> Bool
+isJustRight (Right (Just x)) = True
+isJustRight _ = False
+
+unWrapRight :: (Either WrapError x) -> x
+unWrapRight (Right x) = x

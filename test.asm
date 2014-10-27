@@ -1,10 +1,6 @@
-[macro declare [name address] [merge {[macro} [sym name] {[] [addr} [addr address] {]} {]}]]
-[macro set [name value] [merge {lda} value {sta [} [sym name] {]}]]
+.include "stdmac.asm"
 
-
-[declare "x" $215]
-[declare "y" $216]
-[set "y" {#32}]
-[set "x" {#16}]
-lda [x]
-adc [y]
+lda #0 sta 0
+lda #10 sta 1
+[for-x "x-loop" {0} {1} {
+}]
