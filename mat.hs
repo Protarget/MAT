@@ -3,7 +3,6 @@ import Numeric
 import Evaluation
 import Assembler
 import Tokenizer
-import Debug.Trace
 import Data.List
 
 data AppMode = Expand | Assemble deriving(Show)
@@ -30,8 +29,8 @@ runApp (AppSettings fn Assemble) =
 runApp (AppSettings fn Expand) =
     do
       tokens <-  tokenizeFile $ return fn
-      let result = expandMacros [] tokens in
-        putStrLn $ intercalate "\n" $ map show result
+      let result = expandMacros 0 0 [] tokens in
+        putStrLn $ formatAssembly result result
 
 
 tokenizeFile :: IO String -> IO [Token]
@@ -50,8 +49,13 @@ scanIncludes (x:r) = do
   next <- scanIncludes r
   return $ x : next
 
-showAssembly :: [Token] -> String
-showAssembly ((TokenSymbol x):(TokenSymbol y):r)
-showAssembly [] = ""
-
 scanIncludes [] = return []
+
+formatAssembly :: [Token] -> [Token] -> String
+formatAssembly full ((TokenSymbol t):(TokenSymbol v):r)
+  | TokenLabel v `elem` full = t ++ " " ++ v ++ "\n" ++ formatAssembly full r
+  | otherwise = t ++ "\n" ++ formatAssembly full ((TokenSymbol v):r)
+formatAssembly full ((TokenSymbol t):v:r) = t ++ " " ++ (show v) ++ "\n" ++ formatAssembly full r
+formatAssembly full ((TokenPragma "org"):(TokenAddress v):r) = ".org " ++ (show v) ++ "\n" ++ formatAssembly full r
+formatAssembly full (x:r) = show x ++ "\n" ++ formatAssembly full r
+formatAssembly full [] = ""

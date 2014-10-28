@@ -319,5 +319,5 @@ assembleTokenizedInput code = collectFragments 0x0 expandedCode []
     collectFragments addr (x:xs) buffer = collectFragments addr xs (buffer ++ [x])
     collectFragments addr [] buffer = (AssemblyFragment addr (assembleTokens labels addr buffer)) : []
 
-    expandedCode = expandMacros [] code
+    expandedCode = expandMacros 0 0 [] code
     labels = findLabels 0x0 expandedCode

@@ -1,6 +1,10 @@
 .include "stdmac.asm"
 
-lda #0 sta 0
-lda #10 sta 1
-[for-x "x-loop" {0} {1} {
+[declare "x" $ff00]
+
+[for-x {#0} {#1} {
+  [for-y {#2} {#4} {
+    stx $ff01
+    [set "x" {$ff01}]
+  }]
 }]

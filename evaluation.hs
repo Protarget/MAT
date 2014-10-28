@@ -5,6 +5,8 @@ import Expression
 import Data.List
 import Debug.Trace
 
+data EvaluationState = EvaluationState [Macro] (Int, Int, Int, Int) deriving(Show)
+
 isExpressionBool :: ExpressionResult -> Bool
 isExpressionBool (EBool _) = True
 isExpressionBool _ = False
@@ -37,28 +39,29 @@ builtinExtractValue (ExpressionTokenLiteral (x:[]):[]) = builtinExtractValue [Ex
 builtinExtractValue (x:[]) = EError ("Cannot extract value of token " ++ show x)
 builtinExtractValue _ = EError ("value must be 1-arity")
 
-builtinMerge :: [Macro] -> [ExpressionNode] -> ExpressionResult
-builtinMerge macros = mergeChecker . map (evaluateExpression macros) 
+builtinMerge :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinMerge state = mergeChecker . map (evaluateExpression state) 
   where
     mergeChecker :: [ExpressionResult] -> ExpressionResult
     mergeChecker v
       | all isExpressionTokens v = ETokens $ mergeHelper v
+      | all isExpressionString v = EString $ intercalate "" $ map (\(EString n) -> n) v
       | otherwise = EError("Cannot merge non-token values")
 
     mergeHelper :: [ExpressionResult] -> [Token]
     mergeHelper ((ETokens t):r) = t ++ mergeHelper r
     mergeHelper [] = []
 
-builtinNumericFold :: (Int -> Int -> Int) -> String -> [Macro] -> [ExpressionNode] -> ExpressionResult
-builtinNumericFold fn err macros = foldChecker . map (evaluateExpression macros)
+builtinNumericFold :: (Int -> Int -> Int) -> String -> EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinNumericFold fn err state = foldChecker . map (evaluateExpression state)
   where
     foldChecker :: [ExpressionResult] -> ExpressionResult
     foldChecker v
       | all isExpressionInt v = EInt $ foldl1 fn $ map (\(EInt n) -> n) v
       | otherwise = EError(err)
 
-builtinNumericTokenizer :: (Int -> ExpressionResult) -> String -> String -> [Macro] -> [ExpressionNode] -> ExpressionResult
-builtinNumericTokenizer fn errn err macros = ntokenizerChecker . map (evaluateExpression macros)
+builtinNumericTokenizer :: (Int -> ExpressionResult) -> String -> String -> EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinNumericTokenizer fn errn err state = ntokenizerChecker . map (evaluateExpression state)
   where
     ntokenizerChecker :: [ExpressionResult] -> ExpressionResult
     ntokenizerChecker v
@@ -66,8 +69,8 @@ builtinNumericTokenizer fn errn err macros = ntokenizerChecker . map (evaluateEx
       | all isExpressionInt v = fn ((\(EInt n) -> n) $ head v)
       | otherwise = EError(err)
 
-builtInStringTokenizer :: (String -> ExpressionResult) -> String -> String -> [Macro] -> [ExpressionNode] -> ExpressionResult
-builtInStringTokenizer fn errn err macros = stokenizerChecker . map (evaluateExpression macros)
+builtInStringTokenizer :: (String -> ExpressionResult) -> String -> String -> EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtInStringTokenizer fn errn err state = stokenizerChecker . map (evaluateExpression state)
   where
     stokenizerChecker :: [ExpressionResult] -> ExpressionResult
     stokenizerChecker v
@@ -75,26 +78,26 @@ builtInStringTokenizer fn errn err macros = stokenizerChecker . map (evaluateExp
       | all isExpressionString v = fn ((\(EString n) -> n) $ head v)
       | otherwise = EError(err)
 
-builtinIf :: [Macro] -> [ExpressionNode] -> ExpressionResult
-builtinIf macros (v:a:b:[]) = ifChecker (evaluateExpression macros v) [a, b]
+builtinIf :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinIf state (v:a:b:[]) = ifChecker (evaluateExpression state v) [a, b]
   where
     ifChecker :: ExpressionResult -> [ExpressionNode] -> ExpressionResult
-    ifChecker (EBool True) (a:b:[]) = evaluateExpression macros a
-    ifChecker (EBool False) (a:b:[]) = evaluateExpression macros b
-builtinIf macros _ = EError("If must be 3-arity")
+    ifChecker (EBool True) (a:b:[]) = evaluateExpression state a
+    ifChecker (EBool False) (a:b:[]) = evaluateExpression state b
+builtinIf state _ = EError("If must be 3-arity")
 
-builtinEqual :: [Macro] -> [ExpressionNode] -> ExpressionResult
-builtinEqual macros (a:b:[]) = equalChecker (evaluateExpression macros a) (evaluateExpression macros b)
+builtinEqual :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinEqual state (a:b:[]) = equalChecker (evaluateExpression state a) (evaluateExpression state b)
   where
     equalChecker (EInt x) (EInt y) = EBool (x == y)
 
-builtinExpand :: [Macro] -> [ExpressionNode] -> ExpressionResult
-builtinExpand macros (a:[]) = expandChecker (evaluateExpression macros a)
+builtinExpand :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinExpand (EvaluationState macros (i0, i1, i2, i3)) (a:[]) = expandChecker (evaluateExpression (EvaluationState macros (i0, i1, i2, i3)) a)
   where
-    expandChecker (ETokens v) = ETokens $ expandMacros macros v
+    expandChecker (ETokens v) = ETokens $ expandMacros (i0 + 1) i1 macros v
 
-builtinLet :: [Macro] -> [ExpressionNode] -> ExpressionResult
-builtinLet macros ((ExpressionValue (TokenSymbol x)):y:z:[]) = evaluateExpression macros (reifyMacroArgument z x (evaluateExpression macros y))
+builtinLet :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinLet state ((ExpressionValue (TokenSymbol x)):y:z:[]) = evaluateExpression state (reifyMacroArgument z x (evaluateExpression state y))
 
 builtinLit = builtinNumericTokenizer (\x -> ETokens [TokenLiteral x]) "lit" "Cannot create literal token from non-integer value"
 builtinAddr = builtinNumericTokenizer (\x -> ETokens [TokenAddress x]) "addr" "Cannot create address token from non-integer value"
@@ -108,28 +111,30 @@ builtinAdd = builtinNumericFold (+) "Cannot add non-integer values"
 builtinSub = builtinNumericFold (-) "Cannot subtract non-integer values"
 builtinMul = builtinNumericFold (*) "Cannot multiply non-integer values"
 
-evaluateExpression :: [Macro] -> ExpressionNode -> ExpressionResult
-evaluateExpression macros (Expression (ExpressionValue (TokenSymbol(f)):args)) 
+evaluateExpression :: EvaluationState -> ExpressionNode -> ExpressionResult
+evaluateExpression state (Expression (ExpressionValue (TokenSymbol(f)):args)) 
   | f == "value" = builtinExtractValue args
-  | f == "merge" = builtinMerge macros args
-  | f == "+" = builtinAdd macros args
-  | f == "-" = builtinSub macros args
-  | f == "*" = builtinMul macros args
-  | f == "lit" = builtinLit macros args
-  | f == "addr" = builtinAddr macros args
-  | f == "ind" = builtinInd macros args
-  | f == "inix" = builtinInIx macros args
-  | f == "ixin" = builtinIxIn macros args
-  | f == "label" = builtinLabel macros args
-  | f == "sym" = builtinSym macros args
-  | f == "if" = builtinIf macros args
-  | f == "equal" = builtinEqual macros args
-  | f == "expand" = builtinExpand macros args
-  | f == "length" = lengthCheck (evaluateExpression macros (args !! 0))
-  | f == "let" = builtinLet macros args
-  | otherwise = potentialMacro macros f args
+  | f == "merge" = builtinMerge state args
+  | f == "+" = builtinAdd state args
+  | f == "-" = builtinSub state args
+  | f == "*" = builtinMul state args
+  | f == "lit" = builtinLit state args
+  | f == "addr" = builtinAddr state args
+  | f == "ind" = builtinInd state args
+  | f == "inix" = builtinInIx state args
+  | f == "ixin" = builtinIxIn state args
+  | f == "label" = builtinLabel state args
+  | f == "sym" = builtinSym state args
+  | f == "if" = builtinIf state args
+  | f == "equal" = builtinEqual state args
+  | f == "expand" = builtinExpand state args
+  | f == "length" = lengthCheck (evaluateExpression state (args !! 0))
+  | f == "let" = builtinLet state args
+  | f == "id" = EString ((show i0) ++ "_" ++ (show i1) ++ "_" ++ (show i2) ++ "_" ++ (show i3))
+  | otherwise = potentialMacro state f args
   where
     lengthCheck (ETokens v) = EInt (length v)
+    (EvaluationState _ (i0, i1, i2, i3)) = state
 
 
 evaluateExpression macros (ExpressionTokenLiteral v) = ETokens v
@@ -152,15 +157,15 @@ reifyMacroArgument n _ _ = n
 reifyMacroArguments :: ExpressionNode -> [String] -> [ExpressionResult] -> ExpressionNode
 reifyMacroArguments body args values = foldl (\x (n, v) -> reifyMacroArgument x n v) body (zip args values)
 
-expandMacro :: [Macro] -> [String] -> [ExpressionNode] -> ExpressionNode -> ExpressionResult
+expandMacro :: EvaluationState -> [String] -> [ExpressionNode] -> ExpressionNode -> ExpressionResult
 expandMacro macros argNames args body
   | length argNames /= length args = EError("Supplied arguments don't match macro arity")
   | otherwise = evaluateExpression macros $ reifyMacroArguments body argNames (map (evaluateExpression macros) args) 
 
-potentialMacro :: [Macro] -> String -> [ExpressionNode] -> ExpressionResult
-potentialMacro macros name argValues = potentialMacroCheck $ find (\(Macro v _ _) -> v == name) macros
+potentialMacro :: EvaluationState -> String -> [ExpressionNode] -> ExpressionResult
+potentialMacro (EvaluationState macros (i0, i1, i2, i3)) name argValues = potentialMacroCheck $ find (\(Macro v _ _) -> v == name) macros
   where
-    potentialMacroCheck (Just (Macro _ argNames macroBody)) = expandMacro macros argNames argValues macroBody
+    potentialMacroCheck (Just (Macro _ argNames macroBody)) = expandMacro (EvaluationState macros (i0, i1, i2, i3)) argNames argValues macroBody
     potentialMacroCheck Nothing = EError("Undefined macro name: " ++ name)
 
 readMacroDefinition :: [Token] -> (Maybe Macro, [Token])
@@ -195,19 +200,19 @@ tokenify EVoid = []
 tokenify (EError e) = [TokenDefer]
 tokenify x = []
 
-expandMacros :: [Macro] -> [Token] -> [Token]
-expandMacros m c
-  | (c /= result) = expandMacros merged_macros result
+expandMacros :: Int -> Int -> [Macro] -> [Token] -> [Token]
+expandMacros i0 i m c
+  | (c /= result) = expandMacros i0 (i + 1) merged_macros result
   | otherwise = c
   where
-    result = trace (show c) (evaluateMacros code)
+    result = evaluateMacros 0 code
     merged_macros = m ++ macros
     (_, code, macros) = readMacroDefinitions c
-    evaluateMacros (BeginExpression:xr) = deferEvaluation value
+    evaluateMacros i2 (BeginExpression:xr) = deferEvaluation value
       where
-        deferEvaluation (EError _) = l ++ evaluateMacros r where (l, r) = readExpressionLiteral (BeginExpression:xr)
-        deferEvaluation x = (tokenify x) ++ evaluateMacros remainder
-        value = evaluateExpression merged_macros expression
+        deferEvaluation (EError _) = l ++ evaluateMacros (i2 + 1) r where (l, r) = readExpressionLiteral (BeginExpression:xr)
+        deferEvaluation x = (tokenify x) ++ evaluateMacros (i2 + 1) remainder
+        value = evaluateExpression (EvaluationState merged_macros (i0, i, i2, 0)) expression
         (expression, remainder) = readExpression (BeginExpression:xr)
-    evaluateMacros [] = []
-    evaluateMacros (x:xr) = x : evaluateMacros xr
+    evaluateMacros i2 [] = []
+    evaluateMacros i2 (x:xr) = x : evaluateMacros i2 xr
