@@ -23,7 +23,7 @@ instance Show ExpressionResult where
   show (EError v) = "{ERROR: " ++ v ++ "}"
 
 readExpression :: [Token] -> (ExpressionNode, [Token])
-readExpression (BeginExpression:e) = (Expression x, y)
+readExpression (BeginExpression:e) = respondToError x
   where
     (x, y) = scanExpression e
     scanExpression :: [Token] -> ([ExpressionNode], [Token])
@@ -47,6 +47,11 @@ readExpression (BeginExpression:e) = (Expression x, y)
         (nv, nr) = scanExpression r
     readTokenLiteral depth (TokenLiteralEnd:r) buffer = readTokenLiteral (depth - 1) r (buffer ++ [TokenLiteralEnd])
     readTokenLiteral depth (v:r) buffer = readTokenLiteral depth r (buffer ++ [v])
+    readTokenLiteral depth [] buffer = ((ExpressionError "Missing end to token literal"):[], [])
+
+    respondToError (ExpressionError e:_) = error ("PARSE ERROR: " ++ e)
+    respondToError (v:r) = respondToError r
+    respondToError [] = (Expression x, y)
 
 readExpression (x:xr) = (ExpressionError ("Unable to parse expression branch:" ++ show x), xr)
 

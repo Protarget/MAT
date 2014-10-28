@@ -7,6 +7,11 @@ import Debug.Trace
 
 data EvaluationState = EvaluationState [Macro] (Int, Int, Int, Int) deriving(Show)
 
+firstError :: [ExpressionResult] -> Maybe ExpressionResult
+firstError (EError e:y) = Just $ EError e
+firstError [] = Nothing
+firstError (x:xr) = firstError xr
+
 isExpressionBool :: ExpressionResult -> Bool
 isExpressionBool (EBool _) = True
 isExpressionBool _ = False
@@ -27,17 +32,12 @@ isNodeSymbol :: ExpressionNode -> Bool
 isNodeSymbol (ExpressionValue (TokenSymbol _)) = True
 isNodeSymbol _ = False
 
-builtinExtractValue :: [ExpressionNode] -> ExpressionResult
-builtinExtractValue (ExpressionValue (TokenAddress(f)):[]) = EInt f
-builtinExtractValue (ExpressionValue (TokenLiteral(f)):[]) = EInt f
-builtinExtractValue (ExpressionValue (TokenIndirect(f)):[]) = EInt f
-builtinExtractValue (ExpressionValue (TokenIndirectIndexed(f)):[]) = EInt f
-builtinExtractValue (ExpressionValue (TokenIndexedIndirect(f)):[]) = EInt f
-builtinExtractValue (ExpressionValue (TokenSymbol(f)):[]) = EString f
-builtinExtractValue (ExpressionValue (TokenString(f)):[]) = EString f
-builtinExtractValue (ExpressionTokenLiteral (x:[]):[]) = builtinExtractValue [ExpressionValue x]
-builtinExtractValue (x:[]) = EError ("Cannot extract value of token " ++ show x)
-builtinExtractValue _ = EError ("value must be 1-arity")
+conditionalError :: [ExpressionResult] -> String -> ExpressionResult
+conditionalError results errorString = error
+  where
+    error = errorCheck $ firstError results
+    errorCheck Nothing = EError errorString
+    errorCheck (Just x) = x
 
 builtinMerge :: EvaluationState -> [ExpressionNode] -> ExpressionResult
 builtinMerge state = mergeChecker . map (evaluateExpression state) 
@@ -46,8 +46,7 @@ builtinMerge state = mergeChecker . map (evaluateExpression state)
     mergeChecker v
       | all isExpressionTokens v = ETokens $ mergeHelper v
       | all isExpressionString v = EString $ intercalate "" $ map (\(EString n) -> n) v
-      | otherwise = EError("Cannot merge non-token values")
-
+      | otherwise = conditionalError v ("Cannot merge non-token values")
     mergeHelper :: [ExpressionResult] -> [Token]
     mergeHelper ((ETokens t):r) = t ++ mergeHelper r
     mergeHelper [] = []
@@ -58,7 +57,7 @@ builtinNumericFold fn err state = foldChecker . map (evaluateExpression state)
     foldChecker :: [ExpressionResult] -> ExpressionResult
     foldChecker v
       | all isExpressionInt v = EInt $ foldl1 fn $ map (\(EInt n) -> n) v
-      | otherwise = EError(err)
+      | otherwise = conditionalError v err
 
 builtinNumericTokenizer :: (Int -> ExpressionResult) -> String -> String -> EvaluationState -> [ExpressionNode] -> ExpressionResult
 builtinNumericTokenizer fn errn err state = ntokenizerChecker . map (evaluateExpression state)
@@ -67,7 +66,7 @@ builtinNumericTokenizer fn errn err state = ntokenizerChecker . map (evaluateExp
     ntokenizerChecker v
       | length v /= 1 = EError(errn ++ " must be 1-arity")
       | all isExpressionInt v = fn ((\(EInt n) -> n) $ head v)
-      | otherwise = EError(err)
+      | otherwise = conditionalError v err
 
 builtInStringTokenizer :: (String -> ExpressionResult) -> String -> String -> EvaluationState -> [ExpressionNode] -> ExpressionResult
 builtInStringTokenizer fn errn err state = stokenizerChecker . map (evaluateExpression state)
@@ -76,7 +75,7 @@ builtInStringTokenizer fn errn err state = stokenizerChecker . map (evaluateExpr
     stokenizerChecker v
       | length v /= 1 = EError(errn ++ " must be 1-arity")
       | all isExpressionString v = fn ((\(EString n) -> n) $ head v)
-      | otherwise = EError(err)
+      | otherwise = conditionalError v err
 
 builtinIf :: EvaluationState -> [ExpressionNode] -> ExpressionResult
 builtinIf state (v:a:b:[]) = ifChecker (evaluateExpression state v) [a, b]
@@ -84,20 +83,27 @@ builtinIf state (v:a:b:[]) = ifChecker (evaluateExpression state v) [a, b]
     ifChecker :: ExpressionResult -> [ExpressionNode] -> ExpressionResult
     ifChecker (EBool True) (a:b:[]) = evaluateExpression state a
     ifChecker (EBool False) (a:b:[]) = evaluateExpression state b
-builtinIf state _ = EError("If must be 3-arity")
+    ifChecker (n) (a:b:[]) = conditionalError [n] "If statement first argument must be boolean"
+builtinIf state _ = EError "If must be 3-arity"
 
 builtinEqual :: EvaluationState -> [ExpressionNode] -> ExpressionResult
 builtinEqual state (a:b:[]) = equalChecker (evaluateExpression state a) (evaluateExpression state b)
   where
     equalChecker (EInt x) (EInt y) = EBool (x == y)
+    equalChecker x y = conditionalError [x, y] "Both operands of equal must be integers"
+builtinEqual state _ = EError "Equal must be 2-arity"
 
 builtinExpand :: EvaluationState -> [ExpressionNode] -> ExpressionResult
 builtinExpand (EvaluationState macros (i0, i1, i2, i3)) (a:[]) = expandChecker (evaluateExpression (EvaluationState macros (i0, i1, i2, i3)) a)
   where
     expandChecker (ETokens v) = ETokens $ expandMacros (i0 + 1) i1 macros v
+    expandChecker (v) = conditionalError [v] "Expand's first argument must be tokens"
+builtinExpand _ _ = EError "expand must be 1-arity"
 
 builtinLet :: EvaluationState -> [ExpressionNode] -> ExpressionResult
 builtinLet state ((ExpressionValue (TokenSymbol x)):y:z:[]) = evaluateExpression state (reifyMacroArgument z x (evaluateExpression state y))
+builtinLet state (x:y:z:[]) = EError "First argument to Let must be a symbol"
+builtinLet state _ = EError "Let must be 3 arity"
 
 builtinLit = builtinNumericTokenizer (\x -> ETokens [TokenLiteral x]) "lit" "Cannot create literal token from non-integer value"
 builtinAddr = builtinNumericTokenizer (\x -> ETokens [TokenAddress x]) "addr" "Cannot create address token from non-integer value"
@@ -113,7 +119,6 @@ builtinMul = builtinNumericFold (*) "Cannot multiply non-integer values"
 
 evaluateExpression :: EvaluationState -> ExpressionNode -> ExpressionResult
 evaluateExpression state (Expression (ExpressionValue (TokenSymbol(f)):args)) 
-  | f == "value" = builtinExtractValue args
   | f == "merge" = builtinMerge state args
   | f == "+" = builtinAdd state args
   | f == "-" = builtinSub state args
@@ -197,13 +202,21 @@ tokenify :: ExpressionResult -> [Token]
 tokenify (ETokens v) = v
 tokenify (EInt v) = [TokenLiteral v]
 tokenify EVoid = []
-tokenify (EError e) = [TokenDefer]
 tokenify x = []
+
+errorCheck :: [Macro] -> [Token] -> Maybe ExpressionResult
+errorCheck macros (BeginExpression:xr) = errorCheckInternal $ evaluateExpression (EvaluationState macros (0,0,0,0)) l
+  where
+    (l, r) = readExpression (BeginExpression:xr)
+    errorCheckInternal (EError e) = Just (EError e)
+    errorCheckInternal x = errorCheck macros r
+errorCheck macros (x:xr) = errorCheck macros xr
+errorCheck macros [] = Nothing
 
 expandMacros :: Int -> Int -> [Macro] -> [Token] -> [Token]
 expandMacros i0 i m c
   | (c /= result) = expandMacros i0 (i + 1) merged_macros result
-  | otherwise = c
+  | otherwise = respondToError c $ errorCheck merged_macros c
   where
     result = evaluateMacros 0 code
     merged_macros = m ++ macros
@@ -216,3 +229,6 @@ expandMacros i0 i m c
         (expression, remainder) = readExpression (BeginExpression:xr)
     evaluateMacros i2 [] = []
     evaluateMacros i2 (x:xr) = x : evaluateMacros i2 xr
+
+    respondToError x (Just (EError e)) = error ("EVALUATION ERROR: " ++ e)
+    respondToError x Nothing = x

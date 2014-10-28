@@ -23,7 +23,7 @@ data Token =
   TokenIndirectIndexed Int |
   TokenIndexedIndirect Int |
   TokenPragma String |
-  TokenDefer |
+  TokenDefer String |
   BeginExpression | 
   EndExpression |
   TokenLiteralBegin |
@@ -47,7 +47,7 @@ instance Show Token where
   show (TokenIndirectIndexed v) = '(':(show v) ++ "),Y"
   show (TokenIndexedIndirect v) = '(':(show v) ++ ",X)"
   show (TokenPragma v) = '.' : (show v)
-  show TokenDefer = "{DEFER SHOULD NEVER BE VISIBLE!}"
+  show (TokenDefer v) = "{ERROR:" ++ v ++ " }"
   show BeginExpression = "<"
   show EndExpression = ">"
   show TokenLiteralBegin = "{"
