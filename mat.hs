@@ -29,7 +29,7 @@ runApp (AppSettings fn Assemble) =
 runApp (AppSettings fn Expand) =
     do
       tokens <-  tokenizeFile $ return fn
-      let result = expandMacros 0 0 [] tokens in
+      let result = expandMacros newEvaluationState tokens in
         putStrLn $ formatAssembly result result
 
 

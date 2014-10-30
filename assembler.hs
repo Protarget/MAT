@@ -301,7 +301,7 @@ assembleTokens labels addr ((TokenSymbol i):(TokenIndirectIndexed v):r) = result
 assembleTokens labels addr ((TokenSymbol i):(TokenIndexedIndirect v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionIndexedIndirect i v 
 assembleTokens labels addr ((TokenSymbol i):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionImplied i
 assembleTokens labels addr ((TokenPragma "org"):(TokenAddress x):r) = assembleTokens labels x r
-assembleTokens labels addr (v:[]) = error ("Unexpected token: " ++ (show v))
+assembleTokens labels addr (v:r) = error ("Unexpected token: " ++ (show v))
 assembleTokens labels addr [] = []
 
 assemble :: String -> [AssemblyFragment]
@@ -319,5 +319,5 @@ assembleTokenizedInput code = collectFragments 0x0 expandedCode []
     collectFragments addr (x:xs) buffer = collectFragments addr xs (buffer ++ [x])
     collectFragments addr [] buffer = (AssemblyFragment addr (assembleTokens labels addr buffer)) : []
 
-    expandedCode = expandMacros 0 0 [] code
+    expandedCode = expandMacros newEvaluationState code
     labels = findLabels 0x0 expandedCode

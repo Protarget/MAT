@@ -110,8 +110,8 @@ readComment (_) = (TokenComment, "")
 
 tokenDefinitions :: [TokenDefinition]
 tokenDefinitions =
-  (defineToken ";.*?;"                                      readComment 1)         :    -- Read a comment
-  (defineToken "\"(.*?)\""                                  readString 1)          :    -- Read a quoted string
+  (defineToken ";.*?;"                                     readComment 1)         :    -- Read a comment
+  (defineToken "\"(.*?)\""                                 readString 1)          :    -- Read a quoted string
   (defineToken "\\.([a-zA-Z]+)([^a-zA-Z]|$)"               readPragma 1)          :    -- Read a pragma
   (defineToken "([0-9]+)\\,[xX]"                           readAddressX 2)        :    -- Read a decimal,X address
   (defineToken "(\\$[0-9a-fA-F]+)\\,[xX]"                  readAddressX 2)        :    -- Read a hex,X address

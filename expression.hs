@@ -2,9 +2,10 @@ module Expression where
 
 import Tokenizer
 import Data.List
+import Debug.Trace
 
 data ExpressionNode = ExpressionValue Token | Expression [ExpressionNode] | ExpressionTokenLiteral [Token] | ExpressionError String | ExpressionRaw ExpressionResult
-data ExpressionResult = EBool Bool | EInt Int | ETokens [Token] | EString String | EVoid | EError String
+data ExpressionResult = EBool Bool | EInt Int | ETokens [Token] | EString String | EVoid | EError String | ELambda [String] ExpressionNode
 data Macro = Macro String [String] ExpressionNode deriving(Show)
 
 instance Show ExpressionNode where
