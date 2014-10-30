@@ -2,7 +2,7 @@ import System.Environment
 import Numeric
 import Evaluation
 import Assembler
-import Tokenizer
+import PTokenizer
 import Data.List
 
 data AppMode = Expand | Assemble deriving(Show)
@@ -22,13 +22,13 @@ collectMode [] x = x
 runApp :: AppSettings -> IO ()
 runApp (AppSettings fn Assemble) =
     do
-      tokens <-  tokenizeFile $ return fn
+      tokens <-  tokenizeFile $! return fn
       let result = assembleTokenizedInput tokens in
         putStrLn $ show $ map (\(AssemblyFragment a v) -> (showHex a "") ++ ": " ++ (show $ map (\n -> showHex n "") v)) $ result
 
 runApp (AppSettings fn Expand) =
     do
-      tokens <-  tokenizeFile $ return fn
+      tokens <-  tokenizeFile $! return fn
       let result = expandMacros newEvaluationState tokens in
         putStrLn $ formatAssembly result result
 
@@ -38,6 +38,11 @@ tokenizeFile filename = do
   fileName <- filename
   fileData <- readFile fileName
   scanIncludes $ tokenize fileData
+
+tokenLength :: IO [Token] -> IO Int
+tokenLength d = do
+  x <- d
+  return $ length x
 
 scanIncludes :: [Token] -> IO [Token]
 scanIncludes ((TokenPragma "include"):(TokenString f):r) = do

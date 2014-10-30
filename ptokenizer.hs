@@ -1,15 +1,9 @@
-module Tokenizer where
+module PTokenizer where
 
-import System.IO.Unsafe
-import Text.Regex.PCRE
-import Text.Regex.PCRE.String
-import Data.Maybe
-import Debug.Trace
-import Data.Char
-import Data.String
-import Data.List
-import Data.Ord
+import Text.Parsec
+import Text.Parsec.String
 import Numeric
+
 
 data Token = 
   TokenLabel String | 
@@ -31,10 +25,6 @@ data Token =
   TokenComment
   deriving(Eq)
 
-type TokenProducer = [String] -> (Token, String)
-type TokenCandidate = (Maybe (String, String, String, [String]), TokenProducer, Int)
-type TokenDefinition = (Regex, TokenProducer, Int)
-
 instance Show Token where
   show (TokenLabel v) = v ++ ":"
   show (TokenSymbol v) = v
@@ -52,62 +42,7 @@ instance Show Token where
   show EndExpression = ">"
   show TokenLiteralBegin = "{"
   show TokenLiteralEnd = "}"
-
-thenCmp :: Ordering -> Ordering -> Ordering
-thenCmp EQ x = x
-thenCmp x  _ = x
-
-defineToken :: String -> TokenProducer -> Int -> (Regex, TokenProducer, Int)
-defineToken pat fn pri = (makeRegex pat, fn, pri)
-
-readNumber :: String -> Int
-readNumber ('$':s) = fst $ head $ readHex s
-readNumber s = read s :: Int
-
-readAddress :: TokenProducer
-readAddress (x:y:[]) = (TokenAddress (readNumber x), y)
-readAddress x = error ("Cannot read address from " ++ show x)
-
-readLiteral :: TokenProducer
-readLiteral (x:y:[]) = (TokenLiteral (readNumber x), y)
-readLiteral x = error ("Cannot read literal from " ++ show x)
-
-readIndirect :: TokenProducer
-readIndirect (x:[]) = (TokenIndirect (readNumber x), "")
-
-readIndirectIndexed :: TokenProducer
-readIndirectIndexed (x:[]) = (TokenIndirectIndexed (readNumber x), "")
-
-readIndexedIndirect :: TokenProducer
-readIndexedIndirect (x:[]) = (TokenIndexedIndirect (readNumber x), "")
-
-readControl :: TokenProducer
-readControl ("[":[]) = (BeginExpression, "")
-readControl ("]":[]) = (EndExpression, "")
-readControl ("{":[]) = (TokenLiteralBegin, "")
-readControl ("}":[]) = (TokenLiteralEnd, "")
-
-readSymbol :: TokenProducer
-readSymbol (x:y:xs) = (TokenSymbol x, y)
-
-readString :: TokenProducer
-readString (x:_) = (TokenString x, "")
-
-readLabel :: TokenProducer
-readLabel (x:y:xs) = (TokenLabel x, y)
-
-readPragma :: TokenProducer
-readPragma (x:y:xs) = (TokenPragma x, y)
-
-readAddressX :: TokenProducer
-readAddressX (x:_) = (TokenAddressX (readNumber x), "")
-
-readAddressY :: TokenProducer
-readAddressY (x:_) = (TokenAddressY (readNumber x), "")
-
-readComment :: TokenProducer
-readComment (_) = (TokenComment, "")
-
+{-
 tokenDefinitions :: [TokenDefinition]
 tokenDefinitions =
   (defineToken ";.*?;"                                     readComment 1)         :    -- Read a comment
@@ -130,37 +65,149 @@ tokenDefinitions =
   (defineToken "(\\[|\\]|\\{|\\})"                         readControl 5)         :    -- Read a control character
   (defineToken "([a-zA-Z\\-\\+\\*\\>\\<\\=\\%][a-zA-Z0-9\\-\\+\\*\\>\\<\\=\\%]*)\\:([^\\:]|$)"       readLabel 4)           :    -- Read a label
   (defineToken "([a-zA-Z\\-\\+\\*\\>\\<\\=\\%][a-zA-Z0-9\\-\\+\\*\\>\\<\\=\\%]*)([^a-zA-Z0-9\\-\\+\\*]|$)"    readSymbol 5)          : [] -- Read a symbol
+-}
 
-tokenizeEmit :: TokenCandidate -> [Token]
-tokenizeEmit (Just (before, _, after, subexpressions), fn, _) = filterComment token
-  where 
-    (token, ignored) = fn subexpressions
-    filterComment :: Token -> [Token]
-    filterComment (TokenComment) = (tokenize after)
-    filterComment t = t : (tokenize (ignored ++ after))
 
-tokenizeShortestCompare :: TokenCandidate -> TokenCandidate -> Ordering
-tokenizeShortestCompare (Just (a,_,_,_), _, pa) (Just (b,_,_,_), _, pb) = comparing (length) a b `thenCmp` compare pa pb
-tokenizeShortestCompare (Just (a,_,_,_), _, _) _ = LT
-tokenizeShortestCompare _ (Just (b,_,_,_), _, _) = GT
-tokenizeShortestCompare _ _ = GT
+tokenizeDec :: Parser Int
+tokenizeDec = do
+  v <- many1 $ choice [digit, char '-']
+  return $ read v
 
-tokenizeShortest :: [TokenCandidate] -> TokenCandidate
-tokenizeShortest x  = minimumBy (tokenizeShortestCompare) x
+tokenizeHex :: Parser Int
+tokenizeHex = do
+  char '$'
+  v <- many1 hexDigit
+  return $ fst $ head $ readHex v
+
+tokenizeNum :: Parser Int
+tokenizeNum = choice [tokenizeDec, tokenizeHex]
+
+tokenizeLiteral :: Parser Token
+tokenizeLiteral = do
+  char '#'
+  v <- tokenizeNum
+  return $ TokenLiteral v
+
+tokenizeAddress :: Parser Token
+tokenizeAddress = do
+  v <- tokenizeNum
+  return $ TokenAddress v
+
+tokenizeIndirect :: Parser Token
+tokenizeIndirect = do
+  char '('
+  (TokenAddress a) <- tokenizeAddress
+  char ')'
+  return $ TokenIndirect a
+
+tokenizeIndirectIndexed :: Parser Token
+tokenizeIndirectIndexed = do
+  char '('
+  (TokenAddress y) <- tokenizeAddress
+  char ')'
+  char ','
+  oneOf "yY"
+  return $ TokenIndirectIndexed y
+
+tokenizeIndexedIndirect :: Parser Token
+tokenizeIndexedIndirect = do
+  char '('
+  (TokenAddress x) <- tokenizeAddress
+  char ','
+  oneOf "xX"
+  char ')'
+  return $ TokenIndexedIndirect x
+
+tokenizeAddressX :: Parser Token
+tokenizeAddressX = do
+  (TokenAddress x) <- tokenizeAddress
+  char ','
+  oneOf "xX"
+  return $ TokenAddressX x
+
+tokenizeAddressY :: Parser Token
+tokenizeAddressY = do
+  (TokenAddress y) <- tokenizeAddress
+  char ','
+  oneOf "yY"
+  return $ TokenAddressY y
+
+tokenizeAddressGroup :: Parser Token
+tokenizeAddressGroup = choice [try tokenizeIndirectIndexed, try tokenizeIndexedIndirect, try tokenizeIndirect, try tokenizeAddressX, try tokenizeAddressY, tokenizeAddress]
+
+tokenizePragma :: Parser Token
+tokenizePragma = do
+  char '.'
+  (TokenSymbol x) <- tokenizeSymbol
+  return $ TokenPragma x
+
+tokenizeSymbol :: Parser Token
+tokenizeSymbol = do
+  a <- choice [letter, oneOf "+-*><=%_"]
+  b <- many $ choice [letter, oneOf "+-*><=%", digit]
+  return $ TokenSymbol (a:b)
+
+tokenizeLabel :: Parser Token
+tokenizeLabel = do
+    (TokenSymbol a) <- tokenizeSymbol
+    _ <- char ':'
+    return $ TokenLabel a
+
+tokenizeSymbolic :: Parser Token
+tokenizeSymbolic = choice [try tokenizeLabel, tokenizeSymbol]
+
+tokenizeBeginExpression :: Parser Token
+tokenizeBeginExpression = do
+  _ <- char '['
+  return $ BeginExpression
+
+tokenizeEndExpression :: Parser Token
+tokenizeEndExpression = do
+  _ <- char ']'
+  return $ EndExpression
+
+tokenizeBeginLiteral :: Parser Token
+tokenizeBeginLiteral = do
+  _ <- char '{'
+  return $ TokenLiteralBegin
+
+tokenizeEndLiteral :: Parser Token
+tokenizeEndLiteral = do
+  _ <- char '}'
+  return $ TokenLiteralEnd
+
+tokenizeControlChar :: Parser Token
+tokenizeControlChar = choice [tokenizeBeginLiteral, tokenizeEndLiteral, tokenizeBeginExpression, tokenizeEndExpression]
+
+tokenizeString :: Parser Token
+tokenizeString = do
+  char '"'
+  v <- many (noneOf "\"")
+  char '"'
+  return $ TokenString v
+
+tokenizeComment :: Parser Token
+tokenizeComment = do
+  char ';'
+  v <- many (noneOf "\n")
+  string "\n"
+  return $ TokenComment
+
+tokenizeToken :: Parser Token
+tokenizeToken = choice [tokenizeComment, tokenizePragma, tokenizeString, tokenizeControlChar, tokenizeSymbolic, tokenizeLiteral, tokenizeAddressGroup]
+
+tokenizer :: Parser [Token]
+tokenizer = do
+  v <- (endBy tokenizeToken spaces)
+  eof
+  return $ v
 
 tokenize :: String -> [Token]
-tokenize [] = []
-tokenize x
-  | null matches = []
-  | otherwise = tokenizeEmit $ tokenizeShortest matches
+tokenize = filter (not . isComment) . checkResult . parse tokenizer ""
   where
-    matches = 
-      filter (\(n, _, _) -> isJust n) $ 
-      map (\(n, y, p) -> ((unWrapRight $ unsafePerformIO $ regexec n x), y, p)) tokenDefinitions
+    checkResult (Right tokens) = tokens
+    checkResult (Left e) = error (show e)
 
-isJustRight :: (Either WrapError (Maybe (String, String, String, [String]))) -> Bool
-isJustRight (Right (Just x)) = True
-isJustRight _ = False
-
-unWrapRight :: (Either WrapError x) -> x
-unWrapRight (Right x) = x
+isComment :: Token -> Bool
+isComment TokenComment = True
+isComment _ = False

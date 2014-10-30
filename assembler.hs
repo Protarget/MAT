@@ -1,7 +1,7 @@
 module Assembler where
 
 import Data.Word
-import Tokenizer
+import PTokenizer
 import Evaluation
 import Expression
 import Data.Bits

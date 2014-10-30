@@ -1,6 +1,6 @@
 module Expression where
 
-import Tokenizer
+import PTokenizer
 import Data.List
 import Debug.Trace
 
@@ -22,6 +22,7 @@ instance Show ExpressionResult where
   show (EString v) = show v
   show (EVoid) = "{VOID}"
   show (EError v) = "{ERROR: " ++ v ++ "}"
+  show (ELambda a b) = "{LAMBDA: " ++ (show b) ++ "}"
 
 readExpression :: [Token] -> (ExpressionNode, [Token])
 readExpression (BeginExpression:e) = respondToError x
@@ -74,5 +75,5 @@ expressionErrors (Expression v) = intercalate [] $ map expressionErrors v
 
 expressionValid :: ExpressionNode -> Maybe ExpressionNode
 expressionValid expr
-  | (length $ expressionErrors expr) == 0 = Just expr
+  | (null $ expressionErrors expr) = Just expr
   | otherwise = Nothing
