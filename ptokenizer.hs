@@ -18,6 +18,7 @@ data Token =
   TokenIndexedIndirect Int |
   TokenPragma String |
   TokenDefer String |
+  TokenByte Int |
   BeginExpression | 
   EndExpression |
   TokenLiteralBegin |
@@ -38,35 +39,11 @@ instance Show Token where
   show (TokenIndexedIndirect v) = '(':(show v) ++ ",X)"
   show (TokenPragma v) = '.' : (show v)
   show (TokenDefer v) = "{ERROR:" ++ v ++ " }"
+  show (TokenByte v) = ("'" ++ (show v))
   show BeginExpression = "<"
   show EndExpression = ">"
   show TokenLiteralBegin = "{"
   show TokenLiteralEnd = "}"
-{-
-tokenDefinitions :: [TokenDefinition]
-tokenDefinitions =
-  (defineToken ";.*?;"                                     readComment 1)         :    -- Read a comment
-  (defineToken "\"(.*?)\""                                 readString 1)          :    -- Read a quoted string
-  (defineToken "\\.([a-zA-Z]+)([^a-zA-Z]|$)"               readPragma 1)          :    -- Read a pragma
-  (defineToken "(\\-?[0-9]+)\\,[xX]"                       readAddressX 2)        :    -- Read a decimal,X address
-  (defineToken "(\\$[0-9a-fA-F]+)\\,[xX]"                  readAddressX 2)        :    -- Read a hex,X address
-  (defineToken "(\\-?[0-9]+)\\,[yY]"                       readAddressY 2)        :    -- Read a decimal,Y address
-  (defineToken "(\\$[0-9a-fA-F]+)\\,[yY]"                  readAddressY 2)        :    -- Read a hex,Y address
-  (defineToken "\\((\\-?[0-9]+)\\),[yY]"                   readIndirectIndexed 3) :    -- Read a decimal indirect indexed address
-  (defineToken "\\((\\$[0-9a-fA-F]+)\\)\\,[yY]"            readIndirectIndexed 3) :    -- Read a hex indirect indexed address
-  (defineToken "\\((\\-?[0-9]+)\\,[xX]\\)"                 readIndexedIndirect 3) :    -- Read a decimal indexed indirect address
-  (defineToken "\\((\\$[0-9a-fA-F]+)\\,[xX]\\)"            readIndexedIndirect 3) :    -- Read a hex indexed indirect address
-  (defineToken "\\((\\-?[0-9]+)\\)"                        readIndirect 4)        :    -- Read a decimal indirect address
-  (defineToken "\\((\\$[0-9a-fA-F]+)\\)"                   readIndirect 4)        :    -- Read a hex indirect address
-  (defineToken "(\\-?[0-9]+)([^0-9]|$)"                    readAddress 5)         :    -- Read a decimal address
-  (defineToken "(\\$[0-9a-fA-F]+)([^0-9a-fA-F]|$)"         readAddress 5)         :    -- Read a hex address
-  (defineToken "\\#(\\-?[0-9]+)([^0-9]|$)"                 readLiteral 5)         :    -- Read a decimal literal
-  (defineToken "\\#(\\$[0-9a-fA-F]+)([^0-9a-fA-F]|$)"      readLiteral 5)         :    -- Read a hex literal
-  (defineToken "(\\[|\\]|\\{|\\})"                         readControl 5)         :    -- Read a control character
-  (defineToken "([a-zA-Z\\-\\+\\*\\>\\<\\=\\%][a-zA-Z0-9\\-\\+\\*\\>\\<\\=\\%]*)\\:([^\\:]|$)"       readLabel 4)           :    -- Read a label
-  (defineToken "([a-zA-Z\\-\\+\\*\\>\\<\\=\\%][a-zA-Z0-9\\-\\+\\*\\>\\<\\=\\%]*)([^a-zA-Z0-9\\-\\+\\*]|$)"    readSymbol 5)          : [] -- Read a symbol
--}
-
 
 tokenizeDec :: Parser Int
 tokenizeDec = do
@@ -81,6 +58,12 @@ tokenizeHex = do
 
 tokenizeNum :: Parser Int
 tokenizeNum = choice [tokenizeDec, tokenizeHex]
+
+tokenizeByte :: Parser Token
+tokenizeByte = do
+  char '`'
+  v <- tokenizeNum
+  return $ TokenByte v
 
 tokenizeLiteral :: Parser Token
 tokenizeLiteral = do
@@ -194,7 +177,7 @@ tokenizeComment = do
   return $ TokenComment
 
 tokenizeToken :: Parser Token
-tokenizeToken = choice [tokenizeComment, tokenizePragma, tokenizeString, tokenizeControlChar, tokenizeSymbolic, tokenizeLiteral, tokenizeAddressGroup]
+tokenizeToken = choice [tokenizeComment, tokenizePragma, tokenizeString, tokenizeControlChar, tokenizeSymbolic, tokenizeByte, tokenizeLiteral, tokenizeAddressGroup]
 
 tokenizer :: Parser [Token]
 tokenizer = do

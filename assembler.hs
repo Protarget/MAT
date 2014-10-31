@@ -234,7 +234,7 @@ instructionIndirectIndexed i v = (2, indirectIndexed i (fromIntegral v))
 instructionIndexedIndirect i v = (2, indexedIndirect i (fromIntegral v))
 
 findLabels :: Int -> [Token] -> [Label]
-findLabels addr ((TokenLabel v):r) = Label v addr : findLabels addr r
+findLabels addr ((TokenByte v):r) = findLabels (addr + 1) r
 findLabels addr ((TokenSymbol i):(TokenLiteral v):r) = findLabels (addr + increment) r where (increment, result) = instructionLiteral i v 
 findLabels addr ((TokenSymbol i):(TokenSymbol v):r)
   | v == "A" || v == "a" = let (increment, result) = instructionImplied i in findLabels (addr + increment) r
@@ -287,6 +287,7 @@ isImpliedOnly i =
   i == "tya"
 
 assembleTokens :: [Label] -> Int -> [Token] -> [Word8]
+assembleTokens labels addr ((TokenByte v):r) = [fromIntegral v] ++ assembleTokens labels (addr + 1) r
 assembleTokens labels addr ((TokenLabel v):r) = assembleTokens labels addr r
 assembleTokens labels addr ((TokenSymbol i):(TokenLiteral v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionLiteral i v 
 assembleTokens labels addr ((TokenSymbol i):(TokenSymbol v):r)

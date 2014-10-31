@@ -60,6 +60,8 @@ formatAssembly :: [Token] -> [Token] -> String
 formatAssembly full ((TokenSymbol t):(TokenSymbol v):r)
   | TokenLabel v `elem` full = t ++ " " ++ v ++ "\n" ++ formatAssembly full r
   | otherwise = t ++ "\n" ++ formatAssembly full ((TokenSymbol v):r)
+formatAssembly full ((TokenSymbol t):(TokenByte v):r) = t ++ "\n`" ++ (show v) ++ "\n" ++ formatAssembly full r
+formatAssembly full ((TokenSymbol t):(TokenPragma v):r) = t ++ "\n" ++ formatAssembly full ((TokenPragma v):r)
 formatAssembly full ((TokenSymbol t):v:r) = t ++ " " ++ (show v) ++ "\n" ++ formatAssembly full r
 formatAssembly full ((TokenPragma "org"):(TokenAddress v):r) = ".org " ++ (show v) ++ "\n" ++ formatAssembly full r
 formatAssembly full (x:r) = show x ++ "\n" ++ formatAssembly full r

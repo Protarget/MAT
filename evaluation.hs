@@ -186,6 +186,7 @@ builtinNot state _ = EError "Not must be 1-arity"
 evaluateExpression :: EvaluationState -> ExpressionNode -> ExpressionResult
 evaluateExpression state (Expression (ExpressionValue (TokenSymbol(f)):args)) 
   | f == "merge" = builtinMerge state args
+  | f == "&" = builtinMerge state args
   | f == "+" = builtinAdd state args
   | f == "-" = builtinSub state args
   | f == "*" = builtinMul state args
@@ -205,7 +206,7 @@ evaluateExpression state (Expression (ExpressionValue (TokenSymbol(f)):args))
   | f == "not" = builtinNot state args
   | f == "expand" = builtinExpand state args
   | f == "let" = builtinLet state args
-  | f == "id" = EString ((show i0) ++ (show i1) ++ (show i2) ++ (show i3))
+  | f == "id" = EString ((show i0) ++ "_" ++ (show i1) ++ "_" ++ (show i2) ++ "_" ++ (show i3))
   | f == "lambda" = builtinLambda state args
   | f == "%" = builtinLambda state args
   | f == "apply" = builtinApply state args
