@@ -3,6 +3,7 @@ module Evaluation where
 import PTokenizer
 import Expression
 import Data.List
+import Data.Maybe
 import Debug.Trace
 import qualified Data.Map as Map
 import Data.Char (ord, chr)
@@ -258,6 +259,18 @@ builtinChr state (a:[]) = chrChecker (evaluateExpression state a)
     chrChecker x = conditionalError [x] "Argument to chr must be a single integer"
 builtinChr state _ = EError "Chr must be 1-arity"
 
+builtinType :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinType state (a:[]) = typeChecker (evaluateExpression state a)
+  where
+    typeChecker (EInt _) = EString "int"
+    typeChecker (EString _) = EString "string"
+    typeChecker (EBool _) = EString "bool"
+    typeChecker (EError _) = EString "error"
+    typeChecker (ETokens _) = EString "tokens"
+    typeChecker (ELambda _ _) = EString "lambda"
+    typeChecker (EList _) = EString "list"
+builtinType state _ = EError "Type must be 1-arity"
+
 evaluateExpression :: EvaluationState -> ExpressionNode -> ExpressionResult
 evaluateExpression state (Expression (ExpressionValue (TokenSymbol(f)):args)) 
   | f == "merge" = builtinMerge state args
@@ -298,6 +311,7 @@ evaluateExpression state (Expression (ExpressionValue (TokenSymbol(f)):args))
   | f == "length" = builtinLength state args
   | f == "ord" = builtinOrd state args
   | f == "chr" = builtinChr state args
+  | f == "type" = builtinType state args
   | otherwise = potentialMacro state f args
   where
     (EvaluationState _ (i0, i1, i2, i3)) = state

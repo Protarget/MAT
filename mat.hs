@@ -4,6 +4,7 @@ import Evaluation
 import Assembler
 import PTokenizer
 import Data.List
+import Data.Maybe
 import qualified Data.ByteString as BS
 
 data AppMode = Expand | Assemble deriving(Show)
@@ -42,24 +43,31 @@ tokenizeFile :: IO String -> IO [Token]
 tokenizeFile filename = do
   fileName <- filename
   fileData <- readFile fileName
-  scanIncludes $ tokenize fileData
+  scanIncludes (tokenize fileData) []
 
 tokenLength :: IO [Token] -> IO Int
 tokenLength d = do
   x <- d
   return $ length x
 
-scanIncludes :: [Token] -> IO [Token]
-scanIncludes ((TokenPragma "include"):(TokenString f):r) = do
-  f <- tokenizeFile $ return f
-  next <- scanIncludes r
+scanIncludes :: [Token] -> [String] -> IO [Token]
+scanIncludes ((TokenPragma "include"):(TokenString v):r) imported = do
+  f <- tokenizeFile $ return v
+  next <- scanIncludes r imported
   return $ f ++ next
 
-scanIncludes (x:r) = do
-  next <- scanIncludes r
+scanIncludes ((TokenPragma "import"):(TokenString v):r) imported
+  | v `elem` imported = scanIncludes r imported
+  | otherwise = do
+    f <- tokenizeFile $ return v
+    next <- scanIncludes r (v:imported)
+    return $ f ++ next
+
+scanIncludes (x:r) imported = do
+  next <- scanIncludes r imported
   return $ x : next
 
-scanIncludes [] = return []
+scanIncludes [] _ = return []
 
 formatAssembly :: [Token] -> [Token] -> String
 formatAssembly full ((TokenSymbol t):(TokenSymbol v):r)

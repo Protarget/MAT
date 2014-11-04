@@ -20,6 +20,9 @@
     [addr m]
     {]]]}]]
 
+[macro stm [v a]
+  [merge {lda} v {sta} [addr a]]]
+
 [macro data-string [n] 
   [if [empty n]
     {}
