@@ -5,6 +5,7 @@ import Expression
 import Data.List
 import Debug.Trace
 import qualified Data.Map as Map
+import Data.Char (ord, chr)
 
 data EvaluationState = EvaluationState (Map.Map String Macro) (Int, Int, Int, Int) deriving(Show)
 
@@ -31,6 +32,10 @@ isExpressionTokens _ = False
 isExpressionString :: ExpressionResult -> Bool
 isExpressionString (EString _) = True
 isExpressionString _ = False
+
+isExpressionError :: ExpressionResult -> Bool
+isExpressionError (EError _) = True
+isExpressionError _ = False
 
 isNodeSymbol :: ExpressionNode -> Bool
 isNodeSymbol (ExpressionValue (TokenSymbol _)) = True
@@ -100,8 +105,7 @@ builtinIf state _ = EError "If must be 3-arity"
 builtinEqual :: EvaluationState -> [ExpressionNode] -> ExpressionResult
 builtinEqual state (a:b:[]) = equalChecker (evaluateExpression state a) (evaluateExpression state b)
   where
-    equalChecker (EInt x) (EInt y) = EBool (x == y)
-    equalChecker x y = conditionalError [x, y] "Both operands of equal must be integers"
+    equalChecker x y = EBool (x == y)
 builtinEqual state _ = EError "Equal must be 2-arity"
 
 builtinGreater :: EvaluationState -> [ExpressionNode] -> ExpressionResult
@@ -163,11 +167,16 @@ builtinLet state _ = EError "Let must be 3-arity"
 
 builtinLit = builtinNumericTokenizer (\x -> ETokens [TokenLiteral x]) "lit" "Cannot create literal token from non-integer value"
 builtinAddr = builtinNumericTokenizer (\x -> ETokens [TokenAddress x]) "addr" "Cannot create address token from non-integer value"
+builtinAddrX = builtinNumericTokenizer (\x -> ETokens [TokenAddressX x]) "addrx" "Cannot create addressX token from non-integer value"
+builtinAddrY = builtinNumericTokenizer (\x -> ETokens [TokenAddressY x]) "addry" "Cannot create addressY token from non-integer value"
+builtinByte = builtinNumericTokenizer (\x -> ETokens [TokenByte x]) "byte" "Cannot create byte token from non-integer value"
 builtinInd = builtinNumericTokenizer (\x -> ETokens [TokenIndirect x]) "ind" "Cannot create indirect token from non-integer value"
 builtinInIx = builtinNumericTokenizer (\x -> ETokens [TokenIndirectIndexed x]) "inix" "Cannot create indirect indexed token from non-integer value"
 builtinIxIn = builtinNumericTokenizer (\x -> ETokens [TokenIndexedIndirect x]) "ixin" "Cannot create indexed indirect token from non-integer value"
 builtinSym = builtinStringTokenizer(\x -> ETokens [TokenSymbol x]) "sym" "Cannot create symbol from non-string value"
 builtinLabel = builtinStringTokenizer(\x -> ETokens [TokenLabel x]) "label" "Cannot create label from non-string value"
+builtinLabelX = builtinStringTokenizer(\x -> ETokens [TokenLabelX x]) "labelx" "Cannot create labelX from non-string value"
+builtinLabelY = builtinStringTokenizer(\x -> ETokens [TokenLabelY x]) "labely" "Cannot create labelY from non-string value"
 
 builtinAdd = builtinNumericFold (+) "Cannot add non-integer values"
 builtinSub = builtinNumericFold (-) "Cannot subtract non-integer values"
@@ -183,6 +192,72 @@ builtinNot state (a:[]) = notChecker (evaluateExpression state a)
     notChecker x = conditionalError [x] "Argument to not must be a boolean value"
 builtinNot state _ = EError "Not must be 1-arity"
 
+builtinList :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinList state args
+  | any isExpressionError result = conditionalError result "List constructor failed"
+  | otherwise = EList result
+  where result = map (evaluateExpression state) args
+
+builtinHead :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinHead state (a:[]) = headChecker (evaluateExpression state a)
+  where
+    headChecker (EString v) = EString [(head v)]
+    headChecker (EList v) = (head v)
+    headChecker (ETokens v) = ETokens [(head v)]
+    headChecker x = conditionalError [x] "Argument to head must be a list, tokens or a string"
+builtinHead state _ = EError "Head must be 1-arity"
+
+builtinTail :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinTail state (a:[]) = tailChecker (evaluateExpression state a)
+  where
+    tailChecker (EString v) = EString (tail v)
+    tailChecker (EList v) = EList (tail v)
+    tailChecker (ETokens v) = ETokens (tail v)
+    tailChecker x = conditionalError [x] "Argument to head must be a list, tokens or a string"
+tailChecker state _ = EError "Head must be 1-arity"
+
+builtinCons :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinCons state (a:b:[]) = consChecker (evaluateExpression state a) (evaluateExpression state b)
+  where
+    consChecker (EError x) (EList v) = (EError x)
+    consChecker (EString (x:[])) (EString y) = EString (x:y)
+    consChecker (ETokens (x:[])) (ETokens y) = ETokens (x:y)
+    consChecker x (EList v) = EList (x:v)
+    consChecker x y = conditionalError [x, y] "Arguments to cons must be a value and list, a char and a string, or a token and a tokens"
+builtinCons state _ = EError "Cons must be 2-arity"
+
+builtinEmpty :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinEmpty state (a:[]) = emptyChecker (evaluateExpression state a)
+  where
+    emptyChecker (EList v) = EBool $ null v
+    emptyChecker (EString v) = EBool $ null v
+    emptyChecker (ETokens v) = EBool $ null v
+    emptyChecker x = conditionalError [x] "Argument to empty must be a list, tokens, or a string"
+builtinEmpty state _ = EError "Empty must be 1-arity"
+
+builtinLength :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinLength state (a:[]) = lengthChecker (evaluateExpression state a)
+  where
+    lengthChecker (EList v) = EInt $ length v
+    lengthChecker (EString v) = EInt $ length v
+    lengthChecker (ETokens v) = EInt $ length v
+    lengthChecker x = conditionalError [x] "Argument to length must be a list, tokens, or a string"
+builtinLength state _ = EError "Length must be 1-arity"
+
+builtinOrd :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinOrd state (a:[]) = ordChecker (evaluateExpression state a)
+  where
+    ordChecker (EString (v:[])) = EInt $ ord v
+    ordChecker x = conditionalError [x] "Argument to ord must be a single character"
+builtinOrd state _ = EError "Ord must be 1-arity"
+
+builtinChr :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinChr state (a:[]) = chrChecker (evaluateExpression state a)
+  where
+    chrChecker (EInt v) = EString $ [chr v]
+    chrChecker x = conditionalError [x] "Argument to chr must be a single integer"
+builtinChr state _ = EError "Chr must be 1-arity"
+
 evaluateExpression :: EvaluationState -> ExpressionNode -> ExpressionResult
 evaluateExpression state (Expression (ExpressionValue (TokenSymbol(f)):args)) 
   | f == "merge" = builtinMerge state args
@@ -192,6 +267,11 @@ evaluateExpression state (Expression (ExpressionValue (TokenSymbol(f)):args))
   | f == "*" = builtinMul state args
   | f == "lit" = builtinLit state args
   | f == "addr" = builtinAddr state args
+  | f == "addrx" = builtinAddrX state args
+  | f == "addry" = builtinAddrY state args
+  | f == "labelx" = builtinLabelX state args
+  | f == "labely" = builtinLabelY state args
+  | f == "byte" = builtinByte state args
   | f == "ind" = builtinInd state args
   | f == "inix" = builtinInIx state args
   | f == "ixin" = builtinIxIn state args
@@ -210,6 +290,14 @@ evaluateExpression state (Expression (ExpressionValue (TokenSymbol(f)):args))
   | f == "lambda" = builtinLambda state args
   | f == "%" = builtinLambda state args
   | f == "apply" = builtinApply state args
+  | f == "list" = builtinList state args
+  | f == "head" = builtinHead state args
+  | f == "tail" = builtinTail state args
+  | f == "cons" = builtinCons state args
+  | f == "empty" = builtinEmpty state args
+  | f == "length" = builtinLength state args
+  | f == "ord" = builtinOrd state args
+  | f == "chr" = builtinChr state args
   | otherwise = potentialMacro state f args
   where
     (EvaluationState _ (i0, i1, i2, i3)) = state

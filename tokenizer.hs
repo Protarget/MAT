@@ -19,6 +19,8 @@ data Token =
   TokenAddress Int |
   TokenAddressX Int |
   TokenAddressY Int |
+  TokenLabelX String |
+  TokenLabelY String |
   TokenIndirect Int |
   TokenIndirectIndexed Int |
   TokenIndexedIndirect Int |

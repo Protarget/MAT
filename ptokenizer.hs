@@ -16,6 +16,8 @@ data Token =
   TokenIndirect Int |
   TokenIndirectIndexed Int |
   TokenIndexedIndirect Int |
+  TokenLabelX String |
+  TokenLabelY String |
   TokenPragma String |
   TokenDefer String |
   TokenByte Int |
@@ -40,6 +42,8 @@ instance Show Token where
   show (TokenPragma v) = '.' : (show v)
   show (TokenDefer v) = "{ERROR:" ++ v ++ " }"
   show (TokenByte v) = ("'" ++ (show v))
+  show (TokenLabelX v) = v ++ ",X"
+  show (TokenLabelY v) = v ++ ",Y" 
   show BeginExpression = "<"
   show EndExpression = ">"
   show TokenLiteralBegin = "{"
@@ -115,6 +119,20 @@ tokenizeAddressY = do
   oneOf "yY"
   return $ TokenAddressY y
 
+tokenizeLabelX :: Parser Token
+tokenizeLabelX = do
+  (TokenSymbol s) <- tokenizeSymbol
+  char ','
+  oneOf "xX"
+  return $ TokenLabelX s
+
+tokenizeLabelY :: Parser Token
+tokenizeLabelY = do
+  (TokenSymbol s) <- tokenizeSymbol
+  char ','
+  oneOf "yY"
+  return $ TokenLabelY s
+
 tokenizeAddressGroup :: Parser Token
 tokenizeAddressGroup = choice [try tokenizeIndirectIndexed, try tokenizeIndexedIndirect, try tokenizeIndirect, try tokenizeAddressX, try tokenizeAddressY, tokenizeAddress]
 
@@ -137,7 +155,7 @@ tokenizeLabel = do
     return $ TokenLabel a
 
 tokenizeSymbolic :: Parser Token
-tokenizeSymbolic = choice [try tokenizeLabel, tokenizeSymbol]
+tokenizeSymbolic = choice [try tokenizeLabelX, try tokenizeLabelY, try tokenizeLabel, tokenizeSymbol]
 
 tokenizeBeginExpression :: Parser Token
 tokenizeBeginExpression = do
@@ -181,6 +199,7 @@ tokenizeToken = choice [tokenizeComment, tokenizePragma, tokenizeString, tokeniz
 
 tokenizer :: Parser [Token]
 tokenizer = do
+  spaces
   v <- (endBy tokenizeToken spaces)
   eof
   return $ v

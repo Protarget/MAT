@@ -7,6 +7,24 @@
 [macro declare [name address] [merge {[macro} [sym name] {[] [addr} [addr address] {]} {]}]]
 [macro set [name value] [merge {lda} value {sta [} [sym name] {]}]]
 
+; An easy way to declare named sections in the assembled file
+; [define-section name] will create a macro called [section-name] that
+; is a thin wrapper over ".org o .map m"
+[macro define-section [name o m]
+  [merge
+    {[macro} 
+    [sym [merge "section-" name]]
+    {[] [merge {.org} [addr}
+    [addr o]
+    {] {.map} [addr}
+    [addr m]
+    {]]]}]]
+
+[macro data-string [n] 
+  [if [empty n]
+    {}
+    [merge [byte [ord [head n]]] [data-string [tail n]]]]]
+
 ; Macros making use of a scratch register in order to allow registers to be
 ; used as operands that don't normally support them
 ; e.g: [with-x {adc}] will add the accumulator to X

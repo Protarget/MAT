@@ -6,6 +6,7 @@ import Evaluation
 import Expression
 import Data.Bits
 import Data.List
+import Data.Char (toLower)
 import Numeric
 
 data Label = Label String Int deriving(Show)
@@ -235,19 +236,23 @@ instructionIndexedIndirect i v = (2, indexedIndirect i (fromIntegral v))
 
 findLabels :: Int -> [Token] -> [Label]
 findLabels addr ((TokenByte v):r) = findLabels (addr + 1) r
-findLabels addr ((TokenSymbol i):(TokenLiteral v):r) = findLabels (addr + increment) r where (increment, result) = instructionLiteral i v 
+findLabels addr ((TokenLabel v):r) = (Label v addr) : findLabels addr r
+findLabels addr ((TokenSymbol i):(TokenLiteral v):r) = findLabels (addr + increment) r where (increment, result) = instructionLiteral (map toLower i) v
 findLabels addr ((TokenSymbol i):(TokenSymbol v):r)
-  | v == "A" || v == "a" = let (increment, result) = instructionImplied i in findLabels (addr + increment) r
-  | isImpliedOnly i = let (increment, result) = instructionImplied i in findLabels (addr + increment) ((TokenSymbol v):r)
+  | v == "A" || v == "a" = let (increment, result) = instructionImplied (map toLower i) in findLabels (addr + increment) r
+  | isImpliedOnly i = let (increment, result) = instructionImplied (map toLower i) in findLabels (addr + increment) ((TokenSymbol v):r)
   | otherwise = let (increment, result) = instructionLabel addr i (Label "__dummy__" addr) in findLabels (addr + increment) r
-findLabels addr ((TokenSymbol i):(TokenAddress v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddress i v 
-findLabels addr ((TokenSymbol i):(TokenAddressX v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddressX i v
-findLabels addr ((TokenSymbol i):(TokenAddressY v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddressY i v 
-findLabels addr ((TokenSymbol i):(TokenIndirect v):r) = findLabels (addr + increment) r where (increment, result) = instructionIndirect i v 
-findLabels addr ((TokenSymbol i):(TokenIndirectIndexed v):r) = findLabels (addr + increment) r where (increment, result) = instructionIndirectIndexed i v 
-findLabels addr ((TokenSymbol i):(TokenIndexedIndirect v):r) = findLabels (addr + increment) r where (increment, result) = instructionIndexedIndirect i v 
-findLabels addr ((TokenSymbol i):r) = findLabels (addr + increment) r where (increment, result) = instructionImplied i
+findLabels addr ((TokenSymbol i):(TokenAddress v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddress (map toLower i) v 
+findLabels addr ((TokenSymbol i):(TokenAddressX v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddressX (map toLower i) v
+findLabels addr ((TokenSymbol i):(TokenAddressY v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddressY (map toLower i) v 
+findLabels addr ((TokenSymbol i):(TokenLabelX v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddressX (map toLower i) 0x0
+findLabels addr ((TokenSymbol i):(TokenLabelY v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddressY (map toLower i) 0x0
+findLabels addr ((TokenSymbol i):(TokenIndirect v):r) = findLabels (addr + increment) r where (increment, result) = instructionIndirect (map toLower i) v 
+findLabels addr ((TokenSymbol i):(TokenIndirectIndexed v):r) = findLabels (addr + increment) r where (increment, result) = instructionIndirectIndexed (map toLower i) v 
+findLabels addr ((TokenSymbol i):(TokenIndexedIndirect v):r) = findLabels (addr + increment) r where (increment, result) = instructionIndexedIndirect (map toLower i) v 
+findLabels addr ((TokenSymbol i):r) = findLabels (addr + increment) r where (increment, result) = instructionImplied (map toLower i)
 findLabels addr ((TokenPragma "org"):(TokenAddress x):r) = findLabels x r
+findLabels addr ((TokenPragma "map"):(TokenAddress x):r) = findLabels x r
 findLabels addr (v:[]) = error ("Unexpected token: " ++ (show v))
 findLabels addr [] = []
 findLabels addr x = error ("Something went wrong" ++ (show x))
@@ -289,24 +294,45 @@ isImpliedOnly i =
 assembleTokens :: [Label] -> Int -> [Token] -> [Word8]
 assembleTokens labels addr ((TokenByte v):r) = [fromIntegral v] ++ assembleTokens labels (addr + 1) r
 assembleTokens labels addr ((TokenLabel v):r) = assembleTokens labels addr r
-assembleTokens labels addr ((TokenSymbol i):(TokenLiteral v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionLiteral i v 
+assembleTokens labels addr ((TokenSymbol i):(TokenLiteral v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionLiteral (map toLower i)  v 
 assembleTokens labels addr ((TokenSymbol i):(TokenSymbol v):r)
-  | v == "A" || v == "a" = let (increment, result) = instructionImplied i in result ++ assembleTokens labels (addr + increment) r
-  | isImpliedOnly i = let (increment, result) = instructionImplied i in result ++ assembleTokens labels (addr + increment) ((TokenSymbol v):r) 
-  | otherwise = let (increment, result) = instructionLabel addr i (resolveLabel labels v) in result ++ assembleTokens labels (addr + increment) r 
-assembleTokens labels addr ((TokenSymbol i):(TokenAddress v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionAddress i v 
-assembleTokens labels addr ((TokenSymbol i):(TokenAddressX v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionAddressX i v
-assembleTokens labels addr ((TokenSymbol i):(TokenAddressY v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionAddressY i v 
-assembleTokens labels addr ((TokenSymbol i):(TokenIndirect v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionIndirect i v 
-assembleTokens labels addr ((TokenSymbol i):(TokenIndirectIndexed v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionIndirectIndexed i v 
-assembleTokens labels addr ((TokenSymbol i):(TokenIndexedIndirect v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionIndexedIndirect i v 
-assembleTokens labels addr ((TokenSymbol i):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionImplied i
+  | v == "A" || v == "a" = let (increment, result) = instructionImplied (map toLower i) in result ++ assembleTokens labels (addr + increment) r
+  | isImpliedOnly (map toLower i) = let (increment, result) = instructionImplied (map toLower i) in result ++ assembleTokens labels (addr + increment) ((TokenSymbol v):r) 
+  | otherwise = let (increment, result) = instructionLabel addr (map toLower i) (resolveLabel labels v) in result ++ assembleTokens labels (addr + increment) r 
+assembleTokens labels addr ((TokenSymbol i):(TokenAddress v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionAddress (map toLower i) v 
+assembleTokens labels addr ((TokenSymbol i):(TokenAddressX v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionAddressX (map toLower i) v
+assembleTokens labels addr ((TokenSymbol i):(TokenAddressY v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionAddressY (map toLower i) v 
+assembleTokens labels addr ((TokenSymbol i):(TokenLabelX v):r) = result ++ assembleTokens labels (addr + increment) r 
+  where 
+    (Label _ ad) = resolveLabel labels v 
+    (increment, result) = instructionAddressX (map toLower i) ad
+assembleTokens labels addr ((TokenSymbol i):(TokenLabelY v):r) = result ++ assembleTokens labels (addr + increment) r 
+  where 
+    (Label _ ad) = resolveLabel labels v 
+    (increment, result) = instructionAddressY (map toLower i) ad
+assembleTokens labels addr ((TokenSymbol i):(TokenIndirect v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionIndirect (map toLower i) v 
+assembleTokens labels addr ((TokenSymbol i):(TokenIndirectIndexed v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionIndirectIndexed (map toLower i) v 
+assembleTokens labels addr ((TokenSymbol i):(TokenIndexedIndirect v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionIndexedIndirect (map toLower i) v 
+assembleTokens labels addr ((TokenSymbol i):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionImplied (map toLower i)
 assembleTokens labels addr ((TokenPragma "org"):(TokenAddress x):r) = assembleTokens labels x r
+assembleTokens labels addr ((TokenPragma "map"):(TokenAddress x):r) = assembleTokens labels x r
 assembleTokens labels addr (v:r) = error ("Unexpected token: " ++ (show v))
 assembleTokens labels addr [] = []
 
-assemble :: String -> [AssemblyFragment]
-assemble c = assembleTokenizedInput code
+assemble :: [Token] -> [Word8]
+assemble c = assembleBinary start
+  where
+    fragments = assembleTokenizedInput c
+    start = 0x0
+    end = maximum $ map (\(AssemblyFragment addr code) -> addr + length code) fragments
+    assembleBinary n
+      | n >= end = []
+      | otherwise = case find (\(AssemblyFragment addr _) -> addr == n) fragments of
+          (Just (AssemblyFragment x y)) -> y ++ (assembleBinary (n + length y))
+          (Nothing) -> 0x0 : (assembleBinary (n + 1))
+
+assembleFragments :: String -> [AssemblyFragment]
+assembleFragments c = assembleTokenizedInput code
   where
     code = tokenize c
 

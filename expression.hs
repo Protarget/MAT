@@ -4,8 +4,8 @@ import PTokenizer
 import Data.List
 import Debug.Trace
 
-data ExpressionNode = ExpressionValue Token | Expression [ExpressionNode] | ExpressionTokenLiteral [Token] | ExpressionError String | ExpressionRaw ExpressionResult
-data ExpressionResult = EBool Bool | EInt Int | ETokens [Token] | EString String | EVoid | EError String | ELambda [String] ExpressionNode
+data ExpressionNode = ExpressionValue Token | Expression [ExpressionNode] | ExpressionTokenLiteral [Token] | ExpressionError String | ExpressionRaw ExpressionResult deriving (Eq)
+data ExpressionResult = EBool Bool | EInt Int | ETokens [Token] | EString String | EVoid | EError String | ELambda [String] ExpressionNode | EList [ExpressionResult] deriving (Eq)
 data Macro = Macro String [String] ExpressionNode deriving(Show)
 
 instance Show ExpressionNode where
@@ -19,6 +19,7 @@ instance Show ExpressionResult where
   show (EBool v) = show v
   show (EInt v) = show v
   show (ETokens v) = "[" ++ (intercalate " " $ map show v) ++ "]"
+  show (EList v) = "(" ++ (intercalate ", " $ map show v) ++ ")"
   show (EString v) = show v
   show (EVoid) = "{VOID}"
   show (EError v) = "{ERROR: " ++ v ++ "}"
