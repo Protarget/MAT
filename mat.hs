@@ -5,6 +5,7 @@ import Assembler
 import PTokenizer
 import Data.List
 import Data.Maybe
+import Debug.Trace
 import qualified Data.ByteString as BS
 
 data AppMode = Expand | Assemble deriving(Show)
@@ -25,7 +26,7 @@ collectMode [] x = x
 runApp :: AppSettings -> IO ()
 runApp (AppSettings i o Assemble) =
     do
-      tokens <- tokenizeFile $! return i
+      tokens <- tokenizeFile (return i) []
       let result = assemble tokens in
         if o == "" then
           putStrLn $ show result
@@ -34,16 +35,16 @@ runApp (AppSettings i o Assemble) =
 
 runApp (AppSettings i o Expand) =
     do
-      tokens <- tokenizeFile $! return i
+      tokens <- tokenizeFile (return i) []
       let result = expandMacros newEvaluationState tokens in
         putStrLn $ formatAssembly result result
 
 
-tokenizeFile :: IO String -> IO [Token]
-tokenizeFile filename = do
+tokenizeFile :: IO String -> [String] -> IO [Token]
+tokenizeFile filename imported = do
   fileName <- filename
   fileData <- readFile fileName
-  scanIncludes (tokenize fileData) []
+  scanIncludes (tokenize fileData) imported
 
 tokenLength :: IO [Token] -> IO Int
 tokenLength d = do
@@ -52,14 +53,14 @@ tokenLength d = do
 
 scanIncludes :: [Token] -> [String] -> IO [Token]
 scanIncludes ((TokenPragma "include"):(TokenString v):r) imported = do
-  f <- tokenizeFile $ return v
+  f <- tokenizeFile (return v) imported
   next <- scanIncludes r imported
   return $ f ++ next
 
 scanIncludes ((TokenPragma "import"):(TokenString v):r) imported
-  | v `elem` imported = scanIncludes r imported
+  | v `elem` imported =scanIncludes r imported
   | otherwise = do
-    f <- tokenizeFile $ return v
+    f <- tokenizeFile (return v) imported
     next <- scanIncludes r (v:imported)
     return $ f ++ next
 

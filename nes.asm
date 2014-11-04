@@ -1,3 +1,5 @@
+.import "stdmac.asm"
+
 ; Macros for use with the Nintender Entertainment System
 ; Create an INES header at binary location 0
 ; Then resets the logical address to 0 
