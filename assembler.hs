@@ -208,9 +208,11 @@ instructionLiteral i v = (2, immediate i (fromIntegral v))
 
 instructionAddress :: String -> Int -> (Int, [Word8])
 instructionAddress i v
+  | i == "stx" = (3, absolute i (fromIntegral v))
   | v <= 255 = (2, zeropage i (fromIntegral v))
   | v > 255  = (3, absolute i (fromIntegral v))
 instructionAddressX i v
+  | i == "sta" = (3, absoluteX i (fromIntegral v))
   | v <= 255 = (2, zeropageX i (fromIntegral v))
   | v > 255 = (3, absoluteX i (fromIntegral v))
 instructionAddressY i v
@@ -242,13 +244,13 @@ findLabels addr ((TokenLabel v):r) = (Label v addr) : findLabels addr r
 findLabels addr ((TokenSymbol i):(TokenLiteral v):r) = findLabels (addr + increment) r where (increment, result) = instructionLiteral (map toLower i) v
 findLabels addr ((TokenSymbol i):(TokenSymbol v):r)
   | v == "A" || v == "a" = let (increment, result) = instructionImplied (map toLower i) in findLabels (addr + increment) r
-  | isImpliedOnly i = let (increment, result) = instructionImplied (map toLower i) in findLabels (addr + increment) ((TokenSymbol v):r)
-  | otherwise = let (increment, result) = instructionLabel addr i (Label "__dummy__" addr) in findLabels (addr + increment) r
+  | isImpliedOnly (map toLower i) = let (increment, result) = instructionImplied (map toLower i) in findLabels (addr + increment) ((TokenSymbol v):r)
+  | otherwise = let (increment, result) = instructionLabel addr (map toLower i) (Label "__dummy__" addr) in findLabels (addr + increment) r
 findLabels addr ((TokenSymbol i):(TokenAddress v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddress (map toLower i) v 
 findLabels addr ((TokenSymbol i):(TokenAddressX v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddressX (map toLower i) v
 findLabels addr ((TokenSymbol i):(TokenAddressY v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddressY (map toLower i) v 
-findLabels addr ((TokenSymbol i):(TokenLabelX v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddressX (map toLower i) 0x0
-findLabels addr ((TokenSymbol i):(TokenLabelY v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddressY (map toLower i) 0x0
+findLabels addr ((TokenSymbol i):(TokenLabelX v):r) = findLabels (addr + 3) r
+findLabels addr ((TokenSymbol i):(TokenLabelY v):r) = findLabels (addr + 3) r
 findLabels addr ((TokenSymbol i):(TokenIndirect v):r) = findLabels (addr + increment) r where (increment, result) = instructionIndirect (map toLower i) v 
 findLabels addr ((TokenSymbol i):(TokenIndirectIndexed v):r) = findLabels (addr + increment) r where (increment, result) = instructionIndirectIndexed (map toLower i) v 
 findLabels addr ((TokenSymbol i):(TokenIndexedIndirect v):r) = findLabels (addr + increment) r where (increment, result) = instructionIndexedIndirect (map toLower i) v 
@@ -335,7 +337,7 @@ assemble c = assembleSegments 0 segments
 
     padSegment :: Int -> [Word8] -> [Word8]
     padSegment l code
-      | (length code < l) = code ++ [0 | _ <- [0..(l - length code)]]
+      | (length code < l) = code ++ [0xff | _ <- [0..(l - length code)]]
       | otherwise = code
 
     assembleSegments :: Int -> [Segment] -> [Word8]
@@ -349,7 +351,7 @@ assemble c = assembleSegments 0 segments
       | n >= end = []
       | otherwise = case find (\(AssemblyFragment addr _) -> addr == n) fragments of
         (Just (AssemblyFragment x y)) -> y ++ (assembleFragments fragments (n + length y))
-        (Nothing) -> 0x0 : (assembleFragments fragments (n + 1))
+        (Nothing) -> 0xff : (assembleFragments fragments (n + 1))
       where
         end = maximum $ map (\(AssemblyFragment addr code) -> addr + length code) fragments
 
@@ -377,7 +379,7 @@ assembleTokenizedInput code = checkSegments $ collectSegments 0 8192 expandedCod
       | null buffer = collectFragments baseaddr a r []
       | otherwise = (AssemblyFragment (addr - baseaddr) (assembleTokens labels addr buffer)) : collectFragments baseaddr a r []
     collectFragments baseaddr addr (x:xs) buffer = collectFragments baseaddr addr xs (buffer ++ [x])
-    collectFragments baseaddr addr [] buffer = (AssemblyFragment (trace (show addr) $ addr - baseaddr) (assembleTokens labels addr buffer)) : []
+    collectFragments baseaddr addr [] buffer = (AssemblyFragment (addr - baseaddr) (assembleTokens labels addr buffer)) : []
 
     expandedCode = expandMacros newEvaluationState code
     labels = findLabels 0x0 expandedCode
