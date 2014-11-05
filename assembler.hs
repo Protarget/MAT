@@ -255,7 +255,8 @@ findLabels addr ((TokenSymbol i):(TokenIndexedIndirect v):r) = findLabels (addr 
 findLabels addr ((TokenSymbol i):r) = findLabels (addr + increment) r where (increment, result) = instructionImplied (map toLower i)
 findLabels addr ((TokenPragma "org"):(TokenAddress x):r) = findLabels x r
 findLabels addr ((TokenPragma "map"):(TokenAddress x):r) = findLabels x r
-findLabels addr ((TokenPragma "segment"):(TokenAddress x):r) = findLabels 0x0 r
+findLabels addr ((TokenPragma "segment"):(TokenAddress x):(TokenAddress a):r) = findLabels a r
+findLabels addr ((TokenPragma "addr"):_:r) = findLabels (addr + 2) r
 findLabels addr (v:[]) = error ("Unexpected token: " ++ (show v))
 findLabels addr [] = []
 findLabels addr x = error ("Something went wrong" ++ (show x))
@@ -319,7 +320,11 @@ assembleTokens labels addr ((TokenSymbol i):(TokenIndexedIndirect v):r) = result
 assembleTokens labels addr ((TokenSymbol i):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionImplied (map toLower i)
 assembleTokens labels addr ((TokenPragma "org"):(TokenAddress x):r) = assembleTokens labels x r
 assembleTokens labels addr ((TokenPragma "map"):(TokenAddress x):r) = assembleTokens labels x r
-assembleTokens labels addr ((TokenPragma "segment"):(TokenAddress x):r) = assembleTokens labels 0 r
+assembleTokens labels addr ((TokenPragma "segment"):(TokenAddress x):(TokenAddress a):r) = assembleTokens labels a r
+assembleTokens labels addr ((TokenPragma "addr"):(TokenAddress x):r) = [l, h] ++ assembleTokens labels (addr + 2) r where (l, h) = decomposeU16 (fromIntegral x)
+assembleTokens labels addr ((TokenPragma "addr"):(TokenSymbol x):r) = [l, h] ++ assembleTokens labels (addr + 2) r where
+  (Label _ ad) = resolveLabel labels x
+  (l, h) = decomposeU16 (fromIntegral ad)
 assembleTokens labels addr (v:r) = error ("Unexpected token: " ++ (show v))
 assembleTokens labels addr [] = []
 
@@ -349,7 +354,7 @@ assemble c = assembleSegments 0 segments
         end = maximum $ map (\(AssemblyFragment addr code) -> addr + length code) fragments
 
 assembleTokenizedInput :: [Token] -> [Segment]
-assembleTokenizedInput code = checkSegments $ collectSegments 8192 expandedCode []
+assembleTokenizedInput code = checkSegments $ collectSegments 0 8192 expandedCode []
   where
     checkSegments :: [Segment] -> [Segment]
     checkSegments [] = []
@@ -359,21 +364,20 @@ assembleTokenizedInput code = checkSegments $ collectSegments 8192 expandedCode 
       where
         end = minimum $ map (\(AssemblyFragment a c) -> (l - (a + (length c)))) fragments
 
+    collectSegments :: Int -> Int -> [Token] -> [Token] -> [Segment]
+    collectSegments b n ((TokenPragma "segment"):(TokenAddress l):(TokenAddress a):r) buffer
+      | null buffer = collectSegments a l r []
+      | otherwise = (Segment n $ collectFragments b b buffer []) : collectSegments a l r []
+    collectSegments b n (x:xs) buffer = collectSegments b n xs (buffer ++ [x])
+    collectSegments b n [] buffer = (Segment n $ collectFragments b b buffer []) : []
 
-    collectSegments :: Int -> [Token] -> [Token] -> [Segment]
-    collectSegments n ((TokenPragma "segment"):(TokenAddress a):r) buffer
-      | null buffer = collectSegments a r []
-      | otherwise = (Segment n $ collectFragments 0 buffer []) : collectSegments a r []
-    collectSegments n (x:xs) buffer = collectSegments n xs (buffer ++ [x])
-    collectSegments n [] buffer = (Segment n $ collectFragments 0 buffer []) : []
-
-
-    collectFragments :: Int -> [Token] -> [Token] -> [AssemblyFragment]
-    collectFragments addr ((TokenPragma "org"):(TokenAddress a):r) buffer
-      | null buffer = collectFragments a r []
-      | otherwise = (AssemblyFragment addr (assembleTokens labels addr buffer)) : collectFragments a r []
-    collectFragments addr (x:xs) buffer = collectFragments addr xs (buffer ++ [x])
-    collectFragments addr [] buffer = (AssemblyFragment addr (assembleTokens labels addr buffer)) : []
+    collectFragments :: Int -> Int -> [Token] -> [Token] -> [AssemblyFragment]
+    collectFragments baseaddr addr ((TokenPragma "org"):(TokenAddress a):r) buffer
+      | a < baseaddr = error $ "Cannot .org to " ++ show a ++ " because that address is before the beginning of the segment"
+      | null buffer = collectFragments baseaddr a r []
+      | otherwise = (AssemblyFragment (addr - baseaddr) (assembleTokens labels addr buffer)) : collectFragments baseaddr a r []
+    collectFragments baseaddr addr (x:xs) buffer = collectFragments baseaddr addr xs (buffer ++ [x])
+    collectFragments baseaddr addr [] buffer = (AssemblyFragment (trace (show addr) $ addr - baseaddr) (assembleTokens labels addr buffer)) : []
 
     expandedCode = expandMacros newEvaluationState code
     labels = findLabels 0x0 expandedCode

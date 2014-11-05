@@ -1,5 +1,4 @@
-.import "nes.asm"
-
-.segment 16 .org $0 ;Header Segment
-[INES]
-
+.segment $10 $0005
+jmp jerry
+.org $000A
+jerry:
