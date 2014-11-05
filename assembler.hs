@@ -28,6 +28,7 @@ implied "dex" = [0xCA]
 implied "dey" = [0x88]
 implied "inx" = [0xE8]
 implied "iny" = [0xC8]
+implied "lsr" = [0x4A]
 implied "nop" = [0xEA]
 implied "pha" = [0x48]
 implied "php" = [0x08]
@@ -124,6 +125,7 @@ absolute i v = absoluteV i
     absoluteV "lda" = [0xAD, l, h]
     absoluteV "ldx" = [0xAE, l, h]
     absoluteV "ldy" = [0xAC, l, h]
+    absoluteV "lsr" = [0x4E, l, h]
     absoluteV "ora" = [0x0D, l, h]
     absoluteV "rol" = [0x2E, l, h]
     absoluteV "ror" = [0x6E, l, h]
@@ -208,11 +210,9 @@ instructionLiteral i v = (2, immediate i (fromIntegral v))
 
 instructionAddress :: String -> Int -> (Int, [Word8])
 instructionAddress i v
-  | i == "stx" = (3, absolute i (fromIntegral v))
   | v <= 255 = (2, zeropage i (fromIntegral v))
   | v > 255  = (3, absolute i (fromIntegral v))
 instructionAddressX i v
-  | i == "sta" = (3, absoluteX i (fromIntegral v))
   | v <= 255 = (2, zeropageX i (fromIntegral v))
   | v > 255 = (3, absoluteX i (fromIntegral v))
 instructionAddressY i v
@@ -245,7 +245,9 @@ findLabels addr ((TokenSymbol i):(TokenLiteral v):r) = findLabels (addr + increm
 findLabels addr ((TokenSymbol i):(TokenSymbol v):r)
   | v == "A" || v == "a" = let (increment, result) = instructionImplied (map toLower i) in findLabels (addr + increment) r
   | isImpliedOnly (map toLower i) = let (increment, result) = instructionImplied (map toLower i) in findLabels (addr + increment) ((TokenSymbol v):r)
-  | otherwise = let (increment, result) = instructionLabel addr (map toLower i) (Label "__dummy__" addr) in findLabels (addr + increment) r
+  | li == "bcc" || li == "bcs" || li == "beq" || li == "bmi" || li == "bne" || li == "bpl" || li == "bvc" || li == "bvs" = findLabels (addr + 2) r
+  | otherwise = findLabels (addr + 3) r
+  where li = map toLower i
 findLabels addr ((TokenSymbol i):(TokenAddress v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddress (map toLower i) v 
 findLabels addr ((TokenSymbol i):(TokenAddressX v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddressX (map toLower i) v
 findLabels addr ((TokenSymbol i):(TokenAddressY v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddressY (map toLower i) v 
@@ -259,9 +261,9 @@ findLabels addr ((TokenPragma "org"):(TokenAddress x):r) = findLabels x r
 findLabels addr ((TokenPragma "map"):(TokenAddress x):r) = findLabels x r
 findLabels addr ((TokenPragma "segment"):(TokenAddress x):(TokenAddress a):r) = findLabels a r
 findLabels addr ((TokenPragma "addr"):_:r) = findLabels (addr + 2) r
-findLabels addr (v:[]) = error ("Unexpected token: " ++ (show v))
+findLabels addr (v:[]) = error ("Label Search | Unexpected token: " ++ (show v))
 findLabels addr [] = []
-findLabels addr x = error ("Something went wrong" ++ (show x))
+findLabels addr x = error ("Label Search | Something went wrong" ++ (show x))
 
 resolveLabel :: [Label] -> String -> Label
 resolveLabel labels name = checkLabel (find (\(Label n _) -> n == name) labels)

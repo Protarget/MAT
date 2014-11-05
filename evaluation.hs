@@ -271,6 +271,13 @@ builtinType state (a:[]) = typeChecker (evaluateExpression state a)
     typeChecker (EList _) = EString "list"
 builtinType state _ = EError "Type must be 1-arity"
 
+builtinTrace :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinTrace state (a:[]) = traceChecker (evaluateExpression state a)
+  where
+    traceChecker (EString v) = trace v EVoid
+    traceChecker x = conditionalError [x] "Argument to trace must be a single string"
+builtinTrace state _ = EError "Trace must be 1-arity"
+
 evaluateExpression :: EvaluationState -> ExpressionNode -> ExpressionResult
 evaluateExpression state (Expression (ExpressionValue (TokenSymbol(f)):args)) 
   | f == "merge" = builtinMerge state args
@@ -312,6 +319,7 @@ evaluateExpression state (Expression (ExpressionValue (TokenSymbol(f)):args))
   | f == "ord" = builtinOrd state args
   | f == "chr" = builtinChr state args
   | f == "type" = builtinType state args
+  | f == "trace" = builtinTrace state args
   | otherwise = potentialMacro state f args
   where
     (EvaluationState _ (i0, i1, i2, i3)) = state

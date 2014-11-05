@@ -27,7 +27,7 @@ collectMode [] x = x
 runApp :: AppSettings -> IO ()
 runApp (AppSettings i o Assemble) =
     do
-      tokens <- tokenizeFile (return i) []
+      (_, tokens) <- tokenizeFile (return i) []
       let result = assemble tokens in
         if o == "" then
           putStrLn $ show result
@@ -36,12 +36,12 @@ runApp (AppSettings i o Assemble) =
 
 runApp (AppSettings i o Expand) =
     do
-      tokens <- tokenizeFile (return i) []
+      (_, tokens) <- tokenizeFile (return i) []
       let result = expandMacros newEvaluationState tokens in
         putStrLn $ formatAssembly result result
 
 
-tokenizeFile :: IO String -> [String] -> IO [Token]
+tokenizeFile :: IO String -> [String] -> IO ([String], [Token])
 tokenizeFile filename imported = do
   fileName <- filename
   fileData <- readFile fileName
@@ -52,30 +52,29 @@ tokenLength d = do
   x <- d
   return $ length x
 
-scanIncludes :: [Token] -> [String] -> IO [Token]
-
+scanIncludes :: [Token] -> [String] -> IO ([String], [Token])
 scanIncludes ((TokenPragma "include"):(TokenString v):r) imported = do
-  f <- tokenizeFile (return v) imported
-  next <- scanIncludes r imported
-  return $ f ++ next
+  (sub, f) <- tokenizeFile (return v) imported
+  (sub2, next) <- scanIncludes r (union sub imported)
+  return $ (sub2, f ++ next)
 
 scanIncludes ((TokenPragma "import"):(TokenString v):r) imported
   | v `elem` imported = scanIncludes r imported
   | otherwise = do
-    f <- tokenizeFile (return v) imported
-    next <- scanIncludes r (v:imported)
-    return $ f ++ next
+    (sub, f) <- tokenizeFile (return v) (v:imported)
+    (sub2, next) <- scanIncludes r (union (v:imported) sub)
+    return $ (sub2, f ++ next) 
 
 scanIncludes ((TokenPragma "incbin"):(TokenString v):r) imported = do
   contents <- BS.readFile v
-  next <- scanIncludes r imported
-  return $ (map (\v -> TokenByte (fromIntegral v)) (BS.unpack contents) ++ next)
+  (sub, next) <- scanIncludes r imported
+  return $ (union sub imported, (map (\v -> TokenByte (fromIntegral v)) (BS.unpack contents) ++ next))
 
 scanIncludes (x:r) imported = do
-  next <- scanIncludes r imported
-  return $ x : next
+  (sub, next) <- scanIncludes r imported
+  return $ (union sub imported, x : next)
 
-scanIncludes [] _ = return []
+scanIncludes [] _ = return ([], [])
 
 formatAssembly :: [Token] -> [Token] -> String
 formatAssembly full ((TokenSymbol t):(TokenSymbol v):r)

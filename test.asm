@@ -1,4 +1,6 @@
 .import "nes.asm"
+.import "stdmac.asm"
+
 .segment $10 $0000 ;Header Segment
 [INES]
 
@@ -21,25 +23,27 @@ vblankwait1:
 
 clrmem:
   LDA #$00
-  STA $0000,X
-  STA $0100,X
-  STA $0200,X
-  STA $0400,X
-  STA $0500,X
-  STA $0600,X
-  STA $0700,X
-  LDA #$FE
-  STA $0300,X
+  [for $0000 [increment $100] [x>= $0700] [->merge<-] [%[n] [merge {sta} [addrx n]]]]
   INX
   BNE clrmem
+
+  lda #64
    
 vblankwait2:      ; Second wait for vblank, PPU is ready after this
   BIT $2002
   BPL vblankwait2
 
+  asl a
+  cmp #0
+  bne colorloop
+  lda #32
+  colorloop:
 
-  LDA #128   ;intensify blues
-  STA $2001
+  sta $2001
+
+  ; LDA #128   ;intensify blues
+  ; STA $2001
+  jmp vblankwait2
 
 Forever:
   JMP Forever     ;jump back to Forever, infinite loop

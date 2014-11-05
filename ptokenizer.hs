@@ -145,7 +145,7 @@ tokenizePragma = do
 tokenizeSymbol :: Parser Token
 tokenizeSymbol = do
   a <- choice [letter, oneOf "+-*><=%_"]
-  b <- many $ choice [letter, oneOf "+-*><=%", digit]
+  b <- many $ choice [letter, oneOf "+-*><=%_", digit]
   return $ TokenSymbol (a:b)
 
 tokenizeLabel :: Parser Token
