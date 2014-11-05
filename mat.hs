@@ -6,6 +6,7 @@ import PTokenizer
 import Data.List
 import Data.Maybe
 import Debug.Trace
+import Data.Char (ord)
 import qualified Data.ByteString as BS
 
 data AppMode = Expand | Assemble deriving(Show)
@@ -52,17 +53,23 @@ tokenLength d = do
   return $ length x
 
 scanIncludes :: [Token] -> [String] -> IO [Token]
+
 scanIncludes ((TokenPragma "include"):(TokenString v):r) imported = do
   f <- tokenizeFile (return v) imported
   next <- scanIncludes r imported
   return $ f ++ next
 
 scanIncludes ((TokenPragma "import"):(TokenString v):r) imported
-  | v `elem` imported =scanIncludes r imported
+  | v `elem` imported = scanIncludes r imported
   | otherwise = do
     f <- tokenizeFile (return v) imported
     next <- scanIncludes r (v:imported)
     return $ f ++ next
+
+scanIncludes ((TokenPragma "incbin"):(TokenString v):r) imported = do
+  contents <- BS.readFile v
+  next <- scanIncludes r imported
+  return $ (map (\v -> TokenByte (fromIntegral v)) (BS.unpack contents) ++ next)
 
 scanIncludes (x:r) imported = do
   next <- scanIncludes r imported

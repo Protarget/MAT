@@ -7,10 +7,12 @@ import Expression
 import Data.Bits
 import Data.List
 import Data.Char (toLower)
+import Debug.Trace
 import Numeric
 
 data Label = Label String Int deriving(Show)
 data AssemblyFragment = AssemblyFragment Int [Word8] deriving(Show)
+data Segment = Segment Int [AssemblyFragment] deriving(Show)
 
 decomposeU16 :: Word16 -> (Word8, Word8)
 decomposeU16 v = (fromIntegral (v .&. 0xFF), fromIntegral (shiftR (v .&. 0xFF00) 8))
@@ -253,6 +255,7 @@ findLabels addr ((TokenSymbol i):(TokenIndexedIndirect v):r) = findLabels (addr 
 findLabels addr ((TokenSymbol i):r) = findLabels (addr + increment) r where (increment, result) = instructionImplied (map toLower i)
 findLabels addr ((TokenPragma "org"):(TokenAddress x):r) = findLabels x r
 findLabels addr ((TokenPragma "map"):(TokenAddress x):r) = findLabels x r
+findLabels addr ((TokenPragma "segment"):(TokenAddress x):r) = findLabels 0x0 r
 findLabels addr (v:[]) = error ("Unexpected token: " ++ (show v))
 findLabels addr [] = []
 findLabels addr x = error ("Something went wrong" ++ (show x))
@@ -316,29 +319,55 @@ assembleTokens labels addr ((TokenSymbol i):(TokenIndexedIndirect v):r) = result
 assembleTokens labels addr ((TokenSymbol i):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionImplied (map toLower i)
 assembleTokens labels addr ((TokenPragma "org"):(TokenAddress x):r) = assembleTokens labels x r
 assembleTokens labels addr ((TokenPragma "map"):(TokenAddress x):r) = assembleTokens labels x r
+assembleTokens labels addr ((TokenPragma "segment"):(TokenAddress x):r) = assembleTokens labels 0 r
 assembleTokens labels addr (v:r) = error ("Unexpected token: " ++ (show v))
 assembleTokens labels addr [] = []
 
 assemble :: [Token] -> [Word8]
-assemble c = assembleBinary start
+assemble c = assembleSegments 0 segments
   where
-    fragments = assembleTokenizedInput c
-    start = 0x0
-    end = maximum $ map (\(AssemblyFragment addr code) -> addr + length code) fragments
-    assembleBinary n
+    segments = assembleTokenizedInput c
+
+    padSegment :: Int -> [Word8] -> [Word8]
+    padSegment l code
+      | (length code < l) = code ++ [0 | _ <- [0..(l - length code)]]
+      | otherwise = code
+
+    assembleSegments :: Int -> [Segment] -> [Word8]
+    assembleSegments addr [] = []
+    assembleSegments addr ((Segment l code):r) = padSegment l frags ++ assembleSegments (addr + l) r
+      where 
+        frags = assembleFragments code 0
+    
+    assembleFragments :: [AssemblyFragment] -> Int -> [Word8]
+    assembleFragments fragments n
       | n >= end = []
       | otherwise = case find (\(AssemblyFragment addr _) -> addr == n) fragments of
-          (Just (AssemblyFragment x y)) -> y ++ (assembleBinary (n + length y))
-          (Nothing) -> 0x0 : (assembleBinary (n + 1))
+        (Just (AssemblyFragment x y)) -> y ++ (assembleFragments fragments (n + length y))
+        (Nothing) -> 0x0 : (assembleFragments fragments (n + 1))
+      where
+        end = maximum $ map (\(AssemblyFragment addr code) -> addr + length code) fragments
 
-assembleFragments :: String -> [AssemblyFragment]
-assembleFragments c = assembleTokenizedInput code
+assembleTokenizedInput :: [Token] -> [Segment]
+assembleTokenizedInput code = checkSegments $ collectSegments 8192 expandedCode []
   where
-    code = tokenize c
+    checkSegments :: [Segment] -> [Segment]
+    checkSegments [] = []
+    checkSegments ((Segment l fragments):r)
+      | end < 0 = (error $ "Segment overrun occurred! Maximum length: " ++ (show l) ++ "\nGot length: " ++ (show $ l - end))
+      | otherwise = (Segment l fragments):(checkSegments r)
+      where
+        end = minimum $ map (\(AssemblyFragment a c) -> (l - (a + (length c)))) fragments
 
-assembleTokenizedInput :: [Token] -> [AssemblyFragment]
-assembleTokenizedInput code = collectFragments 0x0 expandedCode []
-  where
+
+    collectSegments :: Int -> [Token] -> [Token] -> [Segment]
+    collectSegments n ((TokenPragma "segment"):(TokenAddress a):r) buffer
+      | null buffer = collectSegments a r []
+      | otherwise = (Segment n $ collectFragments 0 buffer []) : collectSegments a r []
+    collectSegments n (x:xs) buffer = collectSegments n xs (buffer ++ [x])
+    collectSegments n [] buffer = (Segment n $ collectFragments 0 buffer []) : []
+
+
     collectFragments :: Int -> [Token] -> [Token] -> [AssemblyFragment]
     collectFragments addr ((TokenPragma "org"):(TokenAddress a):r) buffer
       | null buffer = collectFragments a r []
