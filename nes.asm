@@ -41,7 +41,26 @@
       true
       [includes [tail l] v]]]]
 
-[macro ppu-options [_] 
+[macro init-stack [] {ldx #$ff txs}]
+
+[macro clear-ram [] [merge
+  {ldx #0}
+  [label [merge "clear_ram" [id]]]
+  [for $0000 [increment $100] [x>= $0700] [->merge<-] [%[n] [merge {sta} [addrx n]]]]
+  {bne} [sym [merge "clear_ram"[id]]]]]
+
+[macro ppu-control [nametable-addr vram-addr sprite-addr pat-addr large-sprites master-enabled nmi-enabled]
+  [flags
+    nmi-enabled
+    master-enabled
+    large-sprites
+    [> pat-addr 0]
+    [> sprite-addr 0]
+    [> vram-addr 0]
+    [> [band 2 nametable-addr] 0]
+    [> [band 1 nametable-addr] 0]]]
+
+[macro ppu-mask [_] 
   [flags 
     [includes args "blue"] 
     [includes args "green"] 
@@ -52,7 +71,7 @@
     [includes args "nobgclip"] 
     [includes args "grayscale"]]]
 
-[macro hflags [mapperNumber _]
+[macro header-flags [mapperNumber _]
   [flags16
     [> [band mapperNumber 128] 0]
     [> [band mapperNumber 64] 0]
@@ -71,7 +90,18 @@
     [includes args "battery"] 
     [includes args "hmirror"]]]
 
-; Creates a tight loop waiting for vertical blank
-[macro vblank [] {
-  [merge [label [merge "vblank_" [id]]] {BIT $2002 BPL} [sym [merge "vblank_" [id]]]]
-}]
+; Creates a tight loop waiting for a number of vertical blank
+[macro vblank [blank-count _] 
+  [let vblank-label [if [== 1 [length args]] [head args] [merge "vblank_" [id]]]
+    [if [> blank-count 1]
+    [merge
+      {ldx} [lit blank-count]
+      [label vblank-label]
+      [label [merge "inner_"  vblank-label]]
+      {bit $2002 bpl} [sym vblank-label]
+      {dex}
+      {bne} [sym [merge "inner_"  vblank-label]]]
+    [merge
+      [label vblank-label]
+      {bit $2002 bpl} [sym vblank-label]]]]]
+

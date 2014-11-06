@@ -1,46 +1,37 @@
 .import "nes.asm"
 .import "stdmac.asm"
 
-.segment $10 $0000 ;Header Segment
-[INES 1 1 0 [hflags 0] false]
+.segment $10 $0000                                      ;Header Segment
+[INES 1 1 0 [header-flags 0] false]                     ; Emit an INES header with 1 bank of prg rom, 1 bank of chr rom, and mapper 0 with no flags set, NTSC
 
-.segment $4000 $C000 ;Code Segment
+.segment $4000 $C000                                    ;Code Segment
 RESET:
   sei
   cld
-  ldx #$40
-  stx $4017
-  ldx #$ff
-  txs
-  inx
-  stx $2000
-  stx $2001
-  stx $4010
+  [stm {#$40} $4017]
+  [stm {#0}   $4010]
+  [init-stack]
+  [stm {[ppu-control 0 0 0 0 false false false]} $2000] ; Initialize the ppu control register
+  [stm {[ppu-mask "green"]} $2001]                      ; Initialize the ppu mask register
+  [vblank 1] ;wait for vblank
+  [clear-ram]
 
-  [vblank]
+  [vblank 1 "forever"]                                  ; Acts both as the label "forever" and as a single vblank wait
 
-clrmem:
-  LDA #$00
-  [for $0000 [increment $100] [x>= $0700] [->merge<-] [%[n] [merge {sta} [addrx n]]]]
-  INX
-  BNE clrmem
-   
-  [vblank]
+  [stm {[ppu-mask "red"]} $2001]                        ; Flash the screen red and blue!
+  [vblank 3]
+  [stm {[ppu-mask "blue"]} $2001]
+  [vblank 2]
 
-  lda [ppu-options "green"]
-  sta $2001
-
-Forever:
-  JMP Forever     ;jump back to Forever, infinite loop
+  jmp forever                                           ; Jump to the vblank label "forever"
 
 NMI:
-  RTI
+  rti
 
-.org $FFFA
+.org $FFFA                                              ; Setup the vectors for this program
 .addr NMI
 .addr RESET
 .addr 0
 
-
-.segment $2000 $0000 ;Data Segment
+.segment $2000 $0000                                    ;Data Segment
 .incbin "mario.chr"

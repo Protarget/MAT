@@ -178,6 +178,7 @@ builtinAddr = builtinNumericTokenizer (\x -> ETokens [TokenAddress x]) "addr" "C
 builtinAddrX = builtinNumericTokenizer (\x -> ETokens [TokenAddressX x]) "addrx" "Cannot create addressX token from non-integer value"
 builtinAddrY = builtinNumericTokenizer (\x -> ETokens [TokenAddressY x]) "addry" "Cannot create addressY token from non-integer value"
 builtinByte = builtinNumericTokenizer (\x -> ETokens [TokenByte x]) "byte" "Cannot create byte token from non-integer value"
+builtinString = builtinStringTokenizer (\x -> ETokens [TokenString x]) "string" "Cannot create a string token from non-string value"
 builtinInd = builtinNumericTokenizer (\x -> ETokens [TokenIndirect x]) "ind" "Cannot create indirect token from non-integer value"
 builtinInIx = builtinNumericTokenizer (\x -> ETokens [TokenIndirectIndexed x]) "inix" "Cannot create indirect indexed token from non-integer value"
 builtinIxIn = builtinNumericTokenizer (\x -> ETokens [TokenIndexedIndirect x]) "ixin" "Cannot create indexed indirect token from non-integer value"
@@ -321,6 +322,7 @@ evaluateExpression state (Expression (ExpressionValue (TokenSymbol(f)):args))
   | f == "labelx" = builtinLabelX state args
   | f == "labely" = builtinLabelY state args
   | f == "byte" = builtinByte state args
+  | f == "string" = builtinString state args
   | f == "ind" = builtinInd state args
   | f == "inix" = builtinInIx state args
   | f == "ixin" = builtinIxIn state args
@@ -369,7 +371,7 @@ evaluateExpression state (ExpressionValue (TokenIndirectIndexed v)) = EError("In
 evaluateExpression state (ExpressionValue (TokenString v)) = EString v
 evaluateExpression state (Expression ((ExpressionRaw (ELambda args body)):r)) = builtinApply state ((ExpressionRaw (ELambda args body)):r)
 evaluateExpression state (ExpressionRaw v) = v
-evaluateExpression state node = error ("Wtf, something went wrong: " ++ (show state) ++ " | " ++ (show node))
+evaluateExpression state node = error ("Cannot execute this expression: " ++ (show node))
 
 reifyMacroArgument :: ExpressionNode -> String -> ExpressionResult -> ExpressionNode
 reifyMacroArgument (ExpressionValue (TokenSymbol x)) argName argValue
