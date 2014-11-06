@@ -1,10 +1,10 @@
 .import "nes.asm"
 .import "stdmac.asm"
 
-.segment $10 $0000                                      ;Header Segment
+.segment $10 $0000                                      ; Header Segment
 [INES 1 1 0 [header-flags 0] false]                     ; Emit an INES header with 1 bank of prg rom, 1 bank of chr rom, and mapper 0 with no flags set, NTSC
 
-.segment $4000 $C000                                    ;Code Segment
+.segment $4000 $C000                                    ; Code Segment
 RESET:
   sei
   cld
@@ -33,5 +33,5 @@ NMI:
 .addr RESET
 .addr 0
 
-.segment $2000 $0000                                    ;Data Segment
+.segment $2000 $0000                                    ; Data Segment
 .incbin "mario.chr"
