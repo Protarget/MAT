@@ -6,7 +6,7 @@ import Debug.Trace
 
 data ExpressionNode = ExpressionValue Token | Expression [ExpressionNode] | ExpressionTokenLiteral [Token] | ExpressionError String | ExpressionRaw ExpressionResult deriving (Eq)
 data ExpressionResult = EBool Bool | EInt Int | ETokens [Token] | EString String | EVoid | EError String | ELambda [String] ExpressionNode | EList [ExpressionResult] deriving (Eq)
-data Macro = Macro String [String] ExpressionNode deriving(Show)
+data Macro = Macro String [String] ExpressionNode Bool deriving(Show)
 
 instance Show ExpressionNode where
   show (ExpressionValue v) = show v

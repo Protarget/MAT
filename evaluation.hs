@@ -4,6 +4,7 @@ import PTokenizer
 import Expression
 import Data.List
 import Data.Maybe
+import Data.Bits
 import Debug.Trace
 import qualified Data.Map as Map
 import Data.Char (ord, chr)
@@ -41,6 +42,12 @@ isExpressionError _ = False
 isNodeSymbol :: ExpressionNode -> Bool
 isNodeSymbol (ExpressionValue (TokenSymbol _)) = True
 isNodeSymbol _ = False
+
+isVariadic :: [ExpressionNode] -> Bool
+isVariadic args
+  | length args == 0 = False
+  | last args == (ExpressionValue (TokenSymbol "_")) = True
+  | otherwise = False
 
 conditionalError :: [ExpressionResult] -> String -> ExpressionResult
 conditionalError results errorString = error
@@ -100,7 +107,7 @@ builtinIf state (v:a:b:[]) = ifChecker (evaluateExpression state v) [a, b]
     ifChecker :: ExpressionResult -> [ExpressionNode] -> ExpressionResult
     ifChecker (EBool True) (a:b:[]) = evaluateExpression state a
     ifChecker (EBool False) (a:b:[]) = evaluateExpression state b
-    ifChecker (n) (a:b:[]) = conditionalError [n] "If statement first argument must be boolean"
+    ifChecker (n) (a:b:[]) = trace (show n ++ " " ++ show a ++ " " ++ show b) $ conditionalError [n] "If statement first argument must be boolean"
 builtinIf state _ = EError "If must be 3-arity"
 
 builtinEqual :: EvaluationState -> [ExpressionNode] -> ExpressionResult
@@ -193,6 +200,28 @@ builtinNot state (a:[]) = notChecker (evaluateExpression state a)
     notChecker x = conditionalError [x] "Argument to not must be a boolean value"
 builtinNot state _ = EError "Not must be 1-arity"
 
+builtinBOr = builtinNumericFold (.|.) "Cannot bitwise-or non-integer values"
+builtinBAnd = builtinNumericFold (.&.) "Cannot bitwise-and non-integer values"
+builtinBXor = builtinNumericFold xor "Cannot bitwise-xor non-integer values"
+
+builtinBNot :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinBNot state (a:[]) = bNotChecker (evaluateExpression state a)
+  where
+    bNotChecker (EInt v) = EInt $ complement v
+    bNotChecker x = conditionalError [x] "Argument to bnot must be an integer"
+
+builtinLeftShift :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinLeftShift state (a:b:[]) = bLeftShiftChecker (evaluateExpression state a) (evaluateExpression state b)
+  where
+    bLeftShiftChecker (EInt v) (EInt x) = EInt $ shiftL v x
+    bLeftShiftChecker x y = conditionalError [x, y] "Arguments to left shift must be integers"
+
+builtinRightShift :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinRightShift state (a:b:[]) = bRightShiftChecker (evaluateExpression state a) (evaluateExpression state b)
+  where
+    bRightShiftChecker (EInt v) (EInt x) = EInt $ shiftR v x
+    bRightShiftChecker x y = conditionalError [x, y] "Arguments to right shift must be integers"
+
 builtinList :: EvaluationState -> [ExpressionNode] -> ExpressionResult
 builtinList state args
   | any isExpressionError result = conditionalError result "List constructor failed"
@@ -275,7 +304,7 @@ builtinTrace :: EvaluationState -> [ExpressionNode] -> ExpressionResult
 builtinTrace state (a:[]) = traceChecker (evaluateExpression state a)
   where
     traceChecker (EString v) = trace v EVoid
-    traceChecker x = conditionalError [x] "Argument to trace must be a single string"
+    traceChecker v = trace (show v) EVoid
 builtinTrace state _ = EError "Trace must be 1-arity"
 
 evaluateExpression :: EvaluationState -> ExpressionNode -> ExpressionResult
@@ -304,6 +333,12 @@ evaluateExpression state (Expression (ExpressionValue (TokenSymbol(f)):args))
   | f == "or" = builtinOr state args
   | f == "and" = builtinAnd state args
   | f == "not" = builtinNot state args
+  | f == "bor" = builtinBOr state args
+  | f == "band" = builtinBAnd state args
+  | f == "bnot" = builtinBNot state args
+  | f == "bxor" = builtinBXor state args
+  | f == "<<" = builtinLeftShift state args
+  | f == ">>" = builtinRightShift state args
   | f == "expand" = builtinExpand state args
   | f == "let" = builtinLet state args
   | f == "id" = EString ((show i0) ++ "_" ++ (show i1) ++ "_" ++ (show i2) ++ "_" ++ (show i3))
@@ -346,15 +381,18 @@ reifyMacroArgument n _ _ = n
 reifyMacroArguments :: ExpressionNode -> [String] -> [ExpressionResult] -> ExpressionNode
 reifyMacroArguments body args values = foldl (\x (n, v) -> reifyMacroArgument x n v) body (zip args values)
 
-expandMacro :: EvaluationState -> [String] -> [ExpressionNode] -> ExpressionNode -> ExpressionResult
-expandMacro state argNames args body
-  | length argNames /= length args = EError("Supplied arguments don't match macro arity")
-  | otherwise = evaluateExpression state $ reifyMacroArguments body argNames (map (evaluateExpression state) args) 
+expandMacro :: EvaluationState -> String -> [String] -> [ExpressionNode] -> ExpressionNode -> Bool -> ExpressionResult
+expandMacro state macroName argNames args body variadic
+  | variadic && length args < length argNames = EError (macroName ++": Supplied arguments don't match variadic macro arity") 
+  | variadic = let argVals = (map (evaluateExpression state) $ take (length argNames) args) ++ [EList (map (evaluateExpression state) (drop (length argNames) args))]
+      in evaluateExpression state $ reifyMacroArguments body (argNames ++ ["args"]) argVals
+  | length argNames /= length args = EError(macroName ++ ": Supplied arguments don't match macro arity")
+  | otherwise = evaluateExpression state $ reifyMacroArguments body argNames (map (evaluateExpression state) args)
 
 potentialMacro :: EvaluationState -> String -> [ExpressionNode] -> ExpressionResult
 potentialMacro (EvaluationState macros (i0, i1, i2, i3)) name argValues = potentialMacroCheck $ Map.lookup name macros
   where
-    potentialMacroCheck (Just (Macro _ argNames macroBody)) = expandMacro (EvaluationState macros (i0, i1, i2, i3 + 1)) argNames argValues macroBody
+    potentialMacroCheck (Just (Macro _ argNames macroBody variadic)) = expandMacro (EvaluationState macros (i0, i1, i2, i3 + 1)) name argNames argValues macroBody variadic
     potentialMacroCheck Nothing = EError("Undefined macro name: " ++ name)
 
 readMacroDefinition :: [Token] -> (Maybe Macro, [Token])
@@ -363,7 +401,8 @@ readMacroDefinition (n:nr) = readMacroDefinition tree
     (tree, remainder) = readExpression (n:nr)
     readMacroDefinition :: ExpressionNode -> (Maybe Macro, [Token])
     readMacroDefinition (Expression ((ExpressionValue (TokenSymbol "macro")) : (ExpressionValue (TokenSymbol macroName) : (Expression macroArgs) : macroBody : [])))
-      | all isNodeSymbol macroArgs = (Just $ Macro macroName (map (\(ExpressionValue (TokenSymbol v)) -> v) macroArgs) macroBody, remainder)
+      | isVariadic macroArgs = (Just $ Macro macroName (map (\(ExpressionValue (TokenSymbol v)) -> v) $ init macroArgs) macroBody True, remainder)
+      | all isNodeSymbol macroArgs = (Just $ Macro macroName (map (\(ExpressionValue (TokenSymbol v)) -> v) macroArgs) macroBody False, remainder)
       | otherwise = (Nothing, nr)
     readMacroDefinition _ = (Nothing, nr)
 
@@ -376,9 +415,9 @@ readMacroDefinitions (BeginExpression:nr) = (x, y, z)
       where
         (next, tokens, defs) = readMacroDefinitions skip
         checkForDuplicateDefinition :: Macro -> Map.Map String Macro -> Map.Map String Macro
-        checkForDuplicateDefinition (Macro name body rem) d
+        checkForDuplicateDefinition (Macro name body rem variadic) d
           | Map.member name d = error ("Duplicate macro definition: " ++ name)
-          | otherwise = Map.insert name (Macro name body rem) d
+          | otherwise = Map.insert name (Macro name body rem variadic) d
     checkForMacroDefinition (Nothing, _) = (next, BeginExpression : tokens, defs)
       where
         (next, tokens, defs) = readMacroDefinitions nr

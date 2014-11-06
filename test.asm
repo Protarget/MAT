@@ -2,7 +2,7 @@
 .import "stdmac.asm"
 
 .segment $10 $0000 ;Header Segment
-[INES]
+[INES 1 1 0 [hflags 0] false]
 
 .segment $4000 $C000 ;Code Segment
 RESET:
@@ -17,33 +17,18 @@ RESET:
   stx $2001
   stx $4010
 
-vblankwait1:
-  bit $2002
-  bpl vblankwait1
+  [vblank]
 
 clrmem:
   LDA #$00
   [for $0000 [increment $100] [x>= $0700] [->merge<-] [%[n] [merge {sta} [addrx n]]]]
   INX
   BNE clrmem
-
-  lda #64
    
-vblankwait2:      ; Second wait for vblank, PPU is ready after this
-  BIT $2002
-  BPL vblankwait2
+  [vblank]
 
-  asl a
-  cmp #0
-  bne colorloop
-  lda #32
-  colorloop:
-
+  lda [ppu-options "green"]
   sta $2001
-
-  ; LDA #128   ;intensify blues
-  ; STA $2001
-  jmp vblankwait2
 
 Forever:
   JMP Forever     ;jump back to Forever, infinite loop
