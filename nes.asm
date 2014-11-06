@@ -49,11 +49,27 @@
   [for $0000 [increment $100] [x>= $0700] [->merge<-] [%[n] [merge {sta} [addrx n]]]]
   {bne} [sym [merge "clear_ram"[id]]]]]
 
+[macro set-ppu-control [flags]
+  [merge
+    {lda} [lit flags] {sta $2000}]]
+
+[macro set-ppu-mask [flags]
+  [merge
+    {lda} [lit flags] {sta $2001}]]
+
+[macro set-apu-frame-counter [flags]
+  [merge
+    {lda} [lit flags] {sta $4017}]]
+
+[macro set-apu-dmc-control [flags]
+  [merge
+    {lda} [lit flags] {sta $4010}]]
+
 [macro ppu-control [nametable-addr vram-addr sprite-addr pat-addr large-sprites master-enabled nmi-enabled]
   [flags
-    nmi-enabled
-    master-enabled
-    large-sprites
+    [> nmi-enabled 0]
+    [> master-enabled 0]
+    [> large-sprites 0]
     [> pat-addr 0]
     [> sprite-addr 0]
     [> vram-addr 0]
@@ -70,6 +86,28 @@
     [includes args "nospriteclip"] 
     [includes args "nobgclip"] 
     [includes args "grayscale"]]]
+
+[macro apu-frame-counter [upstep irq-enabled]
+  [flags
+    upstep
+    irq-enabled
+    false
+    false
+    false
+    false
+    false
+    false]]
+
+[macro apu-dmc-control [rate-index looping irq-enabled]
+  [flags
+    irq-enabled
+    looping
+    false
+    false
+    [> [band 8 rate-index] 0]
+    [> [band 4 rate-index] 0]
+    [> [band 2 rate-index] 0]
+    [> [band 1 rate-index] 0]]]
 
 [macro header-flags [mapperNumber _]
   [flags16

@@ -1,37 +1,39 @@
-.import "nes.asm"
+.import "nes.asm"                                           ; Import the standard macro package and the NES macro package
 .import "stdmac.asm"
 
-.segment $10 $0000                                      ; Header Segment
-[INES 1 1 0 [header-flags 0] false]                     ; Emit an INES header with 1 bank of prg rom, 1 bank of chr rom, and mapper 0 with no flags set, NTSC
+.segment $10 $0000                                          ; Header Segment
+[INES 1 1 0 [header-flags 0] false]                         ; Emit an INES header with 1 bank of prg rom, 1 bank of chr rom, and mapper 0 with no flags set, NTSC
 
-.segment $4000 $C000                                    ; Code Segment
+.segment $4000 $C000                                        ; Code Segment
 RESET:
   sei
   cld
-  [stm {#$40} $4017]
-  [stm {#0}   $4010]
+  [set-apu-frame-counter [apu-frame-counter false false]]   ; Initialize the audio registers
+  [set-apu-dmc-control [apu-dmc-control 0 true false]]
   [init-stack]
-  [stm {[ppu-control 0 0 0 0 false false false]} $2000] ; Initialize the ppu control register
-  [stm {[ppu-mask "green"]} $2001]                      ; Initialize the ppu mask register
+  [set-ppu-control [ppu-control 0 0 0 0 0 0 0]]             ; Initialize the ppu control register
+  [set-ppu-mask [ppu-mask]]                                 ; Initialize the ppu mask register
   [vblank 1] ;wait for vblank
   [clear-ram]
 
-  [vblank 1 "forever"]                                  ; Acts both as the label "forever" and as a single vblank wait
+  [vblank 1 "forever"]                                      ; Acts both as the label "forever" and as a single vblank wait
 
-  [stm {[ppu-mask "red"]} $2001]                        ; Flash the screen red and blue!
-  [vblank 3]
-  [stm {[ppu-mask "blue"]} $2001]
-  [vblank 2]
+  [set-ppu-mask [ppu-mask "red"]]                           ; Flash the screen red and blue!
+  [vblank 30]
+  [set-ppu-mask [ppu-mask "blue"]]
+  [vblank 30]
+  [set-ppu-mask [ppu-mask "green"]]
+  [vblank 29]
 
-  jmp forever                                           ; Jump to the vblank label "forever"
+  jmp forever                                               ; Jump to the vblank label "forever"
 
 NMI:
   rti
 
-.org $FFFA                                              ; Setup the vectors for this program
+.org $FFFA                                                  ; Setup the vectors for this program
 .addr NMI
 .addr RESET
 .addr 0
 
-.segment $2000 $0000                                    ; Data Segment
+.segment $2000 $0000                                        ; Data Segment
 .incbin "mario.chr"
