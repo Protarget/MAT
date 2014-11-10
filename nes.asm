@@ -34,19 +34,14 @@
     [if o 16384 0]
     [if p 32768 0]]]
 
-[macro includes [l v]
-  [if [empty l] 
-    false 
-    [if [== [head l] v]
-      true
-      [includes [tail l] v]]]]
-
 [macro init-stack [] {ldx #$ff txs}]
 
 [macro clear-ram [] [merge
   {ldx #0}
+  {lda #0}
   [label [merge "clear_ram" [id]]]
   [for $0000 [increment $100] [x>= $0700] [->merge<-] [%[n] [merge {sta} [addrx n]]]]
+  {inx}
   {bne} [sym [merge "clear_ram"[id]]]]]
 
 [macro set-ppu-control [flags]
@@ -143,3 +138,43 @@
       [label vblank-label]
       {bit $2002 bpl} [sym vblank-label]]]]]
 
+
+; Set the palette data from a memory address
+[macro set-palette [palette-data-address]
+  [merge
+    {ldx $2002} ; Reset the ppu latch
+    {ldx #$3F} ; Load address high
+    {stx $2006}
+    {ldx #$10} ; Load address low
+    {stx $2006}
+    {ldx #$00}
+    [label [merge "palette_loop_" [id]]] ;Copy 32 bytes of data into memory
+    {lda} [addr-or-label-x palette-data-address] ; Emit a string,X token if label, or an addr,X token if number
+    {sta $2007}
+    {inx}
+    {cpx #$20}
+    {bne} [sym [merge "palette_loop_" [id]]]]]
+
+[macro dma-sprites [start-address]
+  [merge
+    {lda} [lit [band start-address $00FF]]
+    {sta $2003}
+    {lda} [lit [>> [band start-address $FF00] 8]]
+    {sta $4014}]]
+
+[macro set-sprite-pos [base n x y]
+  [merge
+    {lda} y
+    {sta} [addr [+ [* 4 n] base]]
+    {lda} x
+    {sta} [addr [+ [* 4 n] base]]]]
+
+[macro set-sprite-tile [base n v]
+  [merge
+    {lda} v
+    {sta} [addr [+ [* 4 n] base]]]]
+
+[macro set-sprite-palette [base n v]
+  [merge
+    {lda} v
+    {sta} [addr [+ [* 4 n] base]]]]

@@ -31,10 +31,51 @@
 ; Macros making use of a scratch register in order to allow registers to be
 ; used as operands that don't normally support them
 ; e.g: [with-x {adc}] will add the accumulator to X
-[macro scratch-register [] [addr $ff00]] 
+[macro scratch-register [] [addr $0e]] 
 [macro with-x [f] [merge {stx} [scratch-register] f [scratch-register]]]
 [macro with-y [f] [merge {sty} [scratch-register] f [scratch-register]]]
 [macro with-a [f] [merge {sta} [scratch-register] f [scratch-register]]]
+
+; A generic for-loop macro that will search for simple modifications of A 
+; occuring in its expanded body and push A onto the stack if it finds any
+; This doesn't handle complex cases like subroutine calls, so when in doubt
+; Push Yourself!
+[macro for-generic [initializer assigner terminator to increm body]
+  [let expanded-body [expand body]
+    [let modifies-a 
+      [or 
+        [includes expanded-body {txa}] 
+        [includes expanded-body {tya}] 
+        [includes expanded-body {lda}]
+        [includes expanded-body {adc}]
+        [includes expanded-body {sbc}]]
+      [merge
+        initializer
+        [label [merge "for_a_" [id]]]
+        assigner
+        [if modifies-a {pha} {}]
+        expanded-body
+        [if modifies-a {pla} {}]
+        {adc} increm
+        {cmp} to
+        {bcc} [sym [merge "for_a_" [id]]]
+        {clc}
+        terminator]]]]
+
+[macro for-a [from to increm body] [for-generic [merge {lda} from] {} {} to increm body]]
+
+[macro for-x [from to increm body] [for-generic [merge {pha lda} from] {tax} {pla} to increm body]]
+
+[macro for-y [from to increm body] [for-generic [merge {pha lda} from] {tay} {pla} to increm body]]
+
+[macro for-m [address from to increm body] [for-generic [merge {pha lda} from] [merge {sta} address] {pla} to increm body]]
+
+[macro includes [l v]
+  [if [empty l] 
+    false 
+    [if [== [head l] v]
+      true
+      [includes [tail l] v]]]]
 
 ; Aliases on comparison functions
 [macro == [a b] [equal a b]]
@@ -54,6 +95,21 @@
 [macro ->merge<- [] [lambda [a b] [merge a b]]]
 [macro ->sum<- [] [lambda [a b] [+ a b]]]
 [macro ->discard<- [] [lambda [a b] b]]
+
+[macro addr-or-label [n]
+  [if [== "string" [type n]]
+    [sym n]
+    [addr n]]]
+
+[macro addr-or-label-x [n]
+  [if [== "string" [type n]]
+    [labelx n]
+    [addrx n]]]
+
+[macro addr-or-label-y [n]
+  [if [== "string" [type n]]
+    [labely n]
+    [addry n]]]
 
 ; Complex static loop macro
 ; index: the starting index of the loop

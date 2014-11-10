@@ -47,6 +47,7 @@ implied "tsx" = [0xBA]
 implied "txa" = [0x8A]
 implied "txs" = [0x9A]
 implied "tya" = [0x98]
+implied x = error ("Invalid implied instruction: " ++ x)
 
 immediate :: String -> Word8 -> [Word8]
 immediate "adc" v = [0x69, v]
@@ -60,6 +61,7 @@ immediate "ldx" v = [0xA2, v]
 immediate "ldy" v = [0xA0, v]
 immediate "ora" v = [0x09, v]
 immediate "sbc" v = [0xE9, v]
+immediate x _ = error ("Invalid immediate instruction: " ++ x)
 
 zeropage :: String -> Word8 -> [Word8]
 zeropage "adc" v = [0x65, v]
@@ -83,6 +85,7 @@ zeropage "sbc" v = [0xE5, v]
 zeropage "sta" v = [0x85, v]
 zeropage "stx" v = [0x86, v]
 zeropage "sty" v = [0x84, v]
+zeropage x v = error ("Invalid zero page instruction: " ++ x)
 
 zeropageX :: String -> Word8 -> [Word8]
 zeropageX "adc" v = [0x75, v]
@@ -101,10 +104,12 @@ zeropageX "ror" v = [0x76, v]
 zeropageX "sbc" v = [0xF5, v]
 zeropageX "sta" v = [0x95, v]
 zeropageX "sty" v = [0x94, v]
+zeropageX x _ = error ("Invalid zero page X instruction: " ++ x)
 
 zeropageY :: String -> Word8 -> [Word8]
 zeropageY "ldx" v = [0xB6, v]
 zeropageY "stx" v = [0x96, v]
+zeroPageY x _ = error ("Invalid zero page Y instruction: " ++ x)
 
 absolute :: String -> Word16 -> [Word8]
 absolute i v = absoluteV i
@@ -133,6 +138,7 @@ absolute i v = absoluteV i
     absoluteV "sta" = [0x8D, l, h]
     absoluteV "stx" = [0x8E, l, h]
     absoluteV "sty" = [0x8C, l, h]
+    absoluteV x = error ("Invalid absolute instruction: " ++ x)
 
 absoluteX :: String -> Word16 -> [Word8]
 absoluteX i v = absoluteV i
@@ -153,6 +159,7 @@ absoluteX i v = absoluteV i
     absoluteV "ror" = [0x7E, l, h]
     absoluteV "sbc" = [0xFD, l, h]
     absoluteV "sta" = [0x9D, l, h]
+    absoluteV x = error ("Invalid absolute X instruction: " ++ x)
 
 absoluteY :: String -> Word16 -> [Word8]
 absoluteY i v = absoluteV i
@@ -167,6 +174,7 @@ absoluteY i v = absoluteV i
     absoluteV "ora" = [0x19, l, h]
     absoluteV "sbc" = [0xF9, l, h]
     absoluteV "sta" = [0x99, l, h]
+    absoluteV x = error ("Invalid absolute Y instruction: " ++ x)
 
 indexedIndirect :: String -> Word8 -> [Word8]
 indexedIndirect "adc" v = [0x61, v]
@@ -177,22 +185,25 @@ indexedIndirect "lda" v = [0xA1, v]
 indexedIndirect "ora" v = [0x01, v]
 indexedIndirect "sbc" v = [0xE1, v]
 indexedIndirect "sta" v = [0x81, v]
+indexedIndirect x _ = error ("Invalid indexed indirect instruction: " ++ x)
 
 indirectIndexed :: String -> Word8 -> [Word8]
 indirectIndexed "adc" v = [0x71, v]
 indirectIndexed "and" v = [0x31, v]
 indirectIndexed "cmp" v = [0xD1, v]
-indirectIndexed "eor" v = [0x51, v]
+indirectIndexed "eor" v = [0x51, v] 
 indirectIndexed "lda" v = [0xB1, v]
 indirectIndexed "ora" v = [0x11, v]
 indirectIndexed "sbc" v = [0xF1, v]
 indirectIndexed "sta" v = [0x91, v]
+indirectIndexed x _ = error ("Invalid indirect indexed instruction: " ++ x)
 
 indirect :: String -> Word16 -> [Word8]
 indirect i v = indirectV i
   where
     (l, h) = decomposeU16 v
     indirectV "jmp" = [0x6C, l, h]
+    indirectV x = error ("Invalid indirect  instruction: " ++ x)
 
 
 relative :: String -> Word8 -> [Word8]
@@ -204,6 +215,7 @@ relative "bne" v = [0xD0, v]
 relative "bpl" v = [0x10, v]
 relative "bvc" v = [0x50, v]
 relative "bvs" v = [0x70, v]
+relative x _ = error ("Invalid relative instruction: " ++ x)
 
 instructionImplied i = (1, implied i)
 instructionLiteral i v = (2, immediate i (fromIntegral v))

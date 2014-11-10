@@ -11,23 +11,30 @@ RESET:
   [set-apu-frame-counter [apu-frame-counter false false]]   ; Initialize the audio registers
   [set-apu-dmc-control [apu-dmc-control 0 true false]]
   [init-stack]
-  [set-ppu-control [ppu-control 0 0 0 0 0 0 0]]             ; Initialize the ppu control register
-  [set-ppu-mask [ppu-mask]]                                 ; Initialize the ppu mask register
+  [set-ppu-control [ppu-control 0 0 0 0 0 0 1]]             ; Initialize the ppu control register
+  [set-ppu-mask [ppu-mask "sprites"]]                       ; Initialize the ppu mask register
   [vblank 1]                                                ; wait for vblank
-  [clear-ram]                                               ; Clear the 2k working ram
+  [clear-ram]                                               ; Clear the 2k working ram}
+  [set-palette "paletteData"]
+  [call "setSpriteTile" {#0} {#2}]
+  [call "setSpritePos" {#0} {#$80} {#$80}]
+  
+  [vblank 1 "forever"]
 
-  [vblank 1 "forever"]                                      ; Acts both as the label "forever" and as a single vblank wait
+  jmp forever
 
-  [set-ppu-mask [ppu-mask "red"]]                           ; Flash the screen red, blue and green with 30 vblanks between each!
-  [vblank 30]
-  [set-ppu-mask [ppu-mask "blue"]]
-  [vblank 30]
-  [set-ppu-mask [ppu-mask "green"]]
-  [vblank 29]
-  jmp forever                                               ; Jump to the vblank label "forever"
+  paletteData:
+   `$0F `$31 `$32 `$33 `$0F `$35 `$36 
+   `$37 `$0F `$39 `$3A `$3B `$0F `$3D 
+   `$3E `$0F `$0F `$1C `$15 `$14 `$0F 
+   `$02 `$38 `$3C `$0F `$1C `$15 `$14 
+   `$0F `$02 `$38 `$3C
 
 NMI:
+  [dma-sprites $0200]
   rti
+
+.include "nes_subs.asm"
 
 .org $FFFA                                                  ; Setup the vectors for this program
 .addr NMI
