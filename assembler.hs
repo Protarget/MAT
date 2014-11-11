@@ -260,6 +260,8 @@ findLabels addr ((TokenSymbol i):(TokenSymbol v):r)
   | li == "bcc" || li == "bcs" || li == "beq" || li == "bmi" || li == "bne" || li == "bpl" || li == "bvc" || li == "bvs" = findLabels (addr + 2) r
   | otherwise = findLabels (addr + 3) r
   where li = map toLower i
+findLabels addr ((TokenSymbol i):(TokenPragma "addrlow"):(TokenSymbol lname):r) = findLabels (addr + 2) r
+findLabels addr ((TokenSymbol i):(TokenPragma "addrhigh"):(TokenSymbol lname):r) = findLabels (addr + 2) r
 findLabels addr ((TokenSymbol i):(TokenAddress v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddress (map toLower i) v 
 findLabels addr ((TokenSymbol i):(TokenAddressX v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddressX (map toLower i) v
 findLabels addr ((TokenSymbol i):(TokenAddressY v):r) = findLabels (addr + increment) r where (increment, result) = instructionAddressY (map toLower i) v 
@@ -319,6 +321,16 @@ assembleTokens labels addr ((TokenSymbol i):(TokenSymbol v):r)
   | v == "A" || v == "a" = let (increment, result) = instructionImplied (map toLower i) in result ++ assembleTokens labels (addr + increment) r
   | isImpliedOnly (map toLower i) = let (increment, result) = instructionImplied (map toLower i) in result ++ assembleTokens labels (addr + increment) ((TokenSymbol v):r) 
   | otherwise = let (increment, result) = instructionLabel addr (map toLower i) (resolveLabel labels v) in result ++ assembleTokens labels (addr + increment) r 
+assembleTokens labels addr ((TokenSymbol i):(TokenPragma "addrlow"):(TokenSymbol lname):r) = result ++ assembleTokens labels (addr + increment) r
+  where 
+    (Label _ a) = resolveLabel labels lname
+    (l, h) = decomposeU16 (fromIntegral a)
+    (increment, result) = instructionLiteral (map toLower i) l
+assembleTokens labels addr ((TokenSymbol i):(TokenPragma "addrhigh"):(TokenSymbol lname):r) = result ++ assembleTokens labels (addr + increment) r
+  where 
+    (Label _ a) = resolveLabel labels lname
+    (l, h) = decomposeU16 (fromIntegral a)
+    (increment, result) = instructionLiteral (map toLower i) h
 assembleTokens labels addr ((TokenSymbol i):(TokenAddress v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionAddress (map toLower i) v 
 assembleTokens labels addr ((TokenSymbol i):(TokenAddressX v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionAddressX (map toLower i) v
 assembleTokens labels addr ((TokenSymbol i):(TokenAddressY v):r) = result ++ assembleTokens labels (addr + increment) r where (increment, result) = instructionAddressY (map toLower i) v 

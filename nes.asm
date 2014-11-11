@@ -165,16 +165,16 @@
 [macro set-sprite-pos [base n x y]
   [merge
     {lda} y
-    {sta} [addr [+ [* 4 n] base]]
+    {sta} [addr [+ [* 4 n] base 0]]
     {lda} x
-    {sta} [addr [+ [* 4 n] base]]]]
+    {sta} [addr [+ [* 4 n] base 3]]]]
 
 [macro set-sprite-tile [base n v]
   [merge
     {lda} v
-    {sta} [addr [+ [* 4 n] base]]]]
+    {sta} [addr [+ [* 4 n] base 1]]]]
 
 [macro set-sprite-palette [base n v]
   [merge
     {lda} v
-    {sta} [addr [+ [* 4 n] base]]]]
+    {sta} [addr [+ [* 4 n] base 2]]]]

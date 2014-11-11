@@ -16,8 +16,8 @@ RESET:
   [vblank 1]                                                ; wait for vblank
   [clear-ram]                                               ; Clear the 2k working ram}
   [set-palette "paletteData"]
-  [call "setSpriteTile" {#0} {#2}]
-  [call "setSpritePos" {#0} {#$80} {#$80}]
+  [set-sprite-tile $200 0 {#1}]
+  [set-sprite-pos $200 0 {#80} {#80}]
   
   [vblank 1 "forever"]
 

@@ -121,3 +121,8 @@
     [act index]
     [combine [act index] [for [update index] update terminate combine act]]]]
 
+; Complex static foreach loop macro
+[macro foreach [l combine act]
+  [if [== 1 [length l]]
+    [act [head l]]
+    [combine [act [head l]] [foreach [tail l] combine act]]]]

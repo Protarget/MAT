@@ -186,6 +186,7 @@ builtinSym = builtinStringTokenizer(\x -> ETokens [TokenSymbol x]) "sym" "Cannot
 builtinLabel = builtinStringTokenizer(\x -> ETokens [TokenLabel x]) "label" "Cannot create label from non-string value"
 builtinLabelX = builtinStringTokenizer(\x -> ETokens [TokenLabelX x]) "labelx" "Cannot create labelX from non-string value"
 builtinLabelY = builtinStringTokenizer(\x -> ETokens [TokenLabelY x]) "labely" "Cannot create labelY from non-string value"
+builtinPragma = builtinStringTokenizer(\x -> ETokens [TokenPragma x]) "pragma" "Cannot create pragma from non-string value"
 
 builtinAdd = builtinNumericFold (+) "Cannot add non-integer values"
 builtinSub = builtinNumericFold (-) "Cannot subtract non-integer values"
@@ -308,6 +309,18 @@ builtinTrace state (a:[]) = traceChecker (evaluateExpression state a)
     traceChecker v = trace (show v) EVoid
 builtinTrace state _ = EError "Trace must be 1-arity"
 
+builtinToString :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinToString state (a:[]) = toStringChecker (evaluateExpression state a)
+  where
+    toStringChecker (EString x) = EString x
+    toStringChecker x = EString $ show x
+
+builtinToInt :: EvaluationState -> [ExpressionNode] -> ExpressionResult
+builtinToInt state (a:[]) = toIntChecker (evaluateExpression state a)
+  where
+    toIntChecker (EString v) = EInt $ read v
+    toIntChecker v = conditionalError [v] "Argument to ->int must be convertable to an integer"
+ 
 evaluateExpression :: EvaluationState -> ExpressionNode -> ExpressionResult
 evaluateExpression state (Expression (ExpressionValue (TokenSymbol(f)):args)) 
   | f == "merge" = builtinMerge state args
@@ -328,6 +341,7 @@ evaluateExpression state (Expression (ExpressionValue (TokenSymbol(f)):args))
   | f == "ixin" = builtinIxIn state args
   | f == "label" = builtinLabel state args
   | f == "sym" = builtinSym state args
+  | f == "pragma" = builtinPragma state args
   | f == "if" = builtinIf state args
   | f == "equal" = builtinEqual state args
   | f == "greater" = builtinGreater state args
@@ -357,6 +371,8 @@ evaluateExpression state (Expression (ExpressionValue (TokenSymbol(f)):args))
   | f == "chr" = builtinChr state args
   | f == "type" = builtinType state args
   | f == "trace" = builtinTrace state args
+  | f == "->int" = builtinToInt state args
+  | f == "->string" = builtinToString state args
   | otherwise = potentialMacro state f args
   where
     (EvaluationState _ (i0, i1, i2, i3)) = state

@@ -39,7 +39,7 @@ instance Show Token where
   show (TokenIndirect v) = '(':(show v) ++ ")"
   show (TokenIndirectIndexed v) = '(':(show v) ++ "),Y"
   show (TokenIndexedIndirect v) = '(':(show v) ++ ",X)"
-  show (TokenPragma v) = '.' : (show v)
+  show (TokenPragma v) = '.' : v
   show (TokenDefer v) = "{ERROR:" ++ v ++ " }"
   show (TokenByte v) = ("'" ++ (show v))
   show (TokenLabelX v) = v ++ ",X"
